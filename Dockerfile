@@ -46,17 +46,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup -g 1001 -S nextjs && \
     adduser -S nextjs -u 1001 -G nextjs nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/.next/standalone ./
+# Copy next.js standalone output (includes minimal node_modules and server.js)
+COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
+
+# Copy static assets that Next.js needs to serve
+COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+
+# Copy public directory (includes PWA files, images, etc.)
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 
 USER nextjs
-EXPOSE 3000
-ENV PORT=3000
+EXPOSE 80 3000
+ENV HOSTNAME="0.0.0.0"
 
-# Runtime environment variable for Firebase Admin (server-side only)
-# This will be provided at runtime by EasyPanel
-ARG FIREBASE_ADMIN_CREDENTIALS
-ENV FIREBASE_ADMIN_CREDENTIALS=$FIREBASE_ADMIN_CREDENTIALS
-
+# Start server (PORT will be set by EasyPanel at runtime)
 CMD ["node", "server.js"]
