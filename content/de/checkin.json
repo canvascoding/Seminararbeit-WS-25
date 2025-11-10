@@ -10,5 +10,10 @@
   "offline": "Keine Verbindung. Wir speichern den Versuch und erinnern dich, sobald du wieder online bist.",
   "listLink": "Alle Orte anzeigen",
   "recentVenue": "Zuletzt eingecheckt",
-  "intentPrompt": "Welche Art von Loop passt gerade?"
+  "intentPrompt": "Welche Art von Loop passt gerade?",
+  "magicLinkConfirming": "Magic-Link wird bestätigt …",
+  "magicLinkConfirmed": "Du bist eingeloggt – willkommen zurück!",
+  "magicLinkEmailMissing": "Wir konnten deine E-Mail nicht erkennen. Bitte gib sie erneut ein.",
+  "magicLinkConfirmError": "Link ungültig oder abgelaufen. Bitte fordere einen neuen Magic-Link an.",
+  "magicLinkPromptEmail": "Bitte bestätige deine E-Mail-Adresse für den Magic-Link."
 }

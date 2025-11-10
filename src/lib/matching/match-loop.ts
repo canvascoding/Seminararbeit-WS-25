@@ -20,7 +20,13 @@ export function buildMatches(
   const loops: MatchResult["loops"] = [];
 
   while (sorted.length >= 2) {
-    const chunkSize = Math.min(participantSlots, sorted.length);
+    let chunkSize = Math.min(participantSlots, sorted.length);
+    if (chunkSize % 2 !== 0 && chunkSize !== 2) {
+      chunkSize -= 1;
+    }
+    if (chunkSize < 2) {
+      break;
+    }
     const chunk = sorted.splice(0, chunkSize);
     loops.push({
       participantIds: chunk.map((item) => item.userId),

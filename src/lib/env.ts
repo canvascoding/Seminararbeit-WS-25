@@ -50,7 +50,12 @@ export function getAdminCredentials(): AdminCredentials | undefined {
   if (!raw) return undefined;
   try {
     const parsed = JSON.parse(raw);
-    return adminSchema.parse(parsed);
+    return adminSchema.parse({
+      ...parsed,
+      privateKey: typeof parsed.privateKey === "string"
+        ? parsed.privateKey.replace(/\\n/g, "\n")
+        : parsed.privateKey,
+    });
   } catch {
     return undefined;
   }

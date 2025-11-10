@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/providers/auth-provider";
+import { MAGIC_LINK_EMAIL_KEY } from "@/lib/constants";
 import {
   logout,
   sendMagicLink,
@@ -26,7 +27,8 @@ export function AuthPanel() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
     setLoading(true);
     setError(null);
     setStatus(null);
@@ -48,10 +50,14 @@ export function AuthPanel() {
         });
         setStatus(t("successSignup"));
       } else {
-        await sendMagicLink(formData.get("email") as string);
+        const email = formData.get("email") as string;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(MAGIC_LINK_EMAIL_KEY, email);
+        }
+        await sendMagicLink(email);
         setStatus(t("successMagic"));
       }
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       console.error(err);
       setError(t("errorGeneric"));

@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { isSignInWithEmailLink, signInWithEmailLink } from "firebase/auth";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { firebaseClientReady, getFirebaseAuth } from "@/lib/firebase/client";
+import { MAGIC_LINK_EMAIL_KEY } from "@/lib/constants";
 
 interface Props {
   onVenueDetected?: (venueId: string) => void;
@@ -18,19 +21,71 @@ export function CheckInScanner({ onVenueDetected, initialVenueId }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [manualVenue, setManualVenue] = useState(initialVenueId ?? "");
   const [slotCode, setSlotCode] = useState("");
-  const [offline, setOffline] = useState(
-    typeof navigator !== "undefined" ? !navigator.onLine : false,
-  );
+  const [offline, setOffline] = useState(false);
 
   useEffect(() => {
-    function handleOnline() {
+    if (!firebaseClientReady() || typeof window === "undefined") return;
+
+    let active = true;
+    const auth = getFirebaseAuth();
+    const currentUrl = window.location.href;
+    if (!isSignInWithEmailLink(auth, currentUrl)) return;
+
+    async function completeMagicLink() {
+      setStatus("loading");
+      setMessage(t("magicLinkConfirming"));
+
+      let email = window.localStorage.getItem(MAGIC_LINK_EMAIL_KEY) ?? "";
+      if (!email) {
+        email = window.prompt(t("magicLinkPromptEmail")) ?? "";
+      }
+
+      if (!email) {
+        if (!active) return;
+        setStatus("error");
+        setMessage(t("magicLinkEmailMissing"));
+        return;
+      }
+
+      try {
+        await signInWithEmailLink(auth, email, currentUrl);
+        window.localStorage.removeItem(MAGIC_LINK_EMAIL_KEY);
+        if (!active) return;
+        setStatus("idle");
+        setMessage(t("magicLinkConfirmed"));
+      } catch (error) {
+        console.error(error);
+        if (!active) return;
+        setStatus("error");
+        setMessage(t("magicLinkConfirmError"));
+      } finally {
+        if (!active) return;
+        const cleanUrl = new URL(window.location.href);
+        ["oobCode", "mode", "lang", "apiKey", "continueUrl", "tenantId"].forEach(
+          (param) => cleanUrl.searchParams.delete(param),
+        );
+        window.history.replaceState({}, "", cleanUrl.toString());
+      }
+    }
+
+    void completeMagicLink();
+
+    return () => {
+      active = false;
+    };
+  }, [t]);
+
+  useEffect(() => {
+    function syncStatus() {
       setOffline(!navigator.onLine);
     }
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOnline);
+
+    syncStatus();
+    window.addEventListener("online", syncStatus);
+    window.addEventListener("offline", syncStatus);
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOnline);
+      window.removeEventListener("online", syncStatus);
+      window.removeEventListener("offline", syncStatus);
     };
   }, []);
 
