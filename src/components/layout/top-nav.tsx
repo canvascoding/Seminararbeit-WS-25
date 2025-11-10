@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
@@ -17,7 +18,7 @@ interface NavLink {
 }
 
 const DEFAULT_VENUE_ID = "mensa-nord";
-const DEFAULT_SLOT_PATH = `/slots/${DEFAULT_VENUE_ID}`;
+const DEFAULT_SLOT_PATH = `/slots/${DEFAULT_VENUE_ID}` as Route;
 
 const links: NavLink[] = [
   { id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" },
