@@ -7,12 +7,25 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 
 type NavKey = "navCheckIn" | "navSlots" | "navPartner" | "navReport";
+type LinkHref = Parameters<typeof Link>[0]["href"];
 
-const links: { href: string; labelKey: NavKey }[] = [
-  { href: "/checkin", labelKey: "navCheckIn" },
-  { href: "/slots/mensa-nord", labelKey: "navSlots" },
-  { href: "/partner", labelKey: "navPartner" },
-  { href: "/report", labelKey: "navReport" },
+interface NavLink {
+  id: string;
+  href: LinkHref;
+  activePath: string;
+  labelKey: NavKey;
+}
+
+const links: NavLink[] = [
+  { id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" },
+  {
+    id: "slots",
+    href: { pathname: "/slots/[venueId]", query: { venueId: "mensa-nord" } },
+    activePath: "/slots/mensa-nord",
+    labelKey: "navSlots",
+  },
+  { id: "partner", href: "/partner", activePath: "/partner", labelKey: "navPartner" },
+  { id: "report", href: "/report", activePath: "/report", labelKey: "navReport" },
 ];
 
 export function TopNav() {
@@ -32,10 +45,10 @@ export function TopNav() {
         <nav className="hidden items-center gap-6 text-sm text-loop-slate/80 md:flex">
           {links.map((link) => (
             <Link
-              key={link.href}
+              key={link.id}
               href={link.href}
               className={
-                pathname === link.href ? "text-loop-green font-semibold" : ""
+                pathname === link.activePath ? "text-loop-green font-semibold" : ""
               }
             >
               {t(link.labelKey)}
@@ -47,7 +60,13 @@ export function TopNav() {
             <Link href="/report">{t("ctaReport")}</Link>
           </Button>
           <Button variant="primary" asChild>
-            <Link href={profile ? "/slots/mensa-nord" : "/checkin"}>
+            <Link
+              href={
+                profile
+                  ? { pathname: "/slots/[venueId]", query: { venueId: "mensa-nord" } }
+                  : "/checkin"
+              }
+            >
               {profile ? t("ctaStart") : t("navCheckIn")}
             </Link>
           </Button>

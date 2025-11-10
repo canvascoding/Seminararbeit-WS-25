@@ -1,0 +1,21 @@
+name: Deploy to EasyPanel
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger EasyPanel deployment webhook
+        env:
+          DEPLOY_WEBHOOK_URL: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+        run: |
+          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
+            echo "::error::Missing EASYPANEL_DEPLOY_URL secret" >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --request POST "$DEPLOY_WEBHOOK_URL"

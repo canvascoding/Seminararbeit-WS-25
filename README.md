@@ -43,6 +43,7 @@ Für Deployments gibt es zusätzlich die Datei `env.runtime.example`, die du als
    - Unter „Environment“ sämtliche Produktiv-Keys aus `.env.runtime` hinterlegen.
    - Port 3000 freigeben; EasyPanel kümmert sich um Reverse Proxy/SSL.
 4. **Deploy:** EasyPanel führt `docker compose pull && docker compose up -d` aus, wodurch das zuvor gebaute Image mit Runtime-Variablen gestartet wird. Änderungen an `.env.runtime` erfordern lediglich einen Restart (`docker compose up -d`), kein Rebuild.
+5. **Automation via GitHub Actions:** Die Workflow-Datei `.github/workflows/deploy.yml` triggert bei jedem Push auf `main` automatisch den bereitgestellten Webhook (EasyPanel-Deploy URL). Lege dazu im GitHub-Repo das Secret `EASYPANEL_DEPLOY_URL` mit dem Wert `http://3.66.71.254:3000/api/deploy/3a6b32233df06c994359f19009d3aecc6e0c2e7e1057b4b8` an. Ohne Secret schlägt der Workflow fehl.
 
 ## Nützliche Skripte
 | Zweck | Kommando |

@@ -1,21 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 
-export async function GET(
-  _request: Request,
-  { params }: { params: { venueId: string } },
-) {
-  const format = new URL(_request.url).searchParams.get("format") ?? "png";
+type RouteParams = Promise<{ venueId: string }>;
+
+export async function GET(request: NextRequest, context: { params: RouteParams }) {
+  const { venueId } = await context.params;
+  const format = new URL(request.url).searchParams.get("format") ?? "png";
   const ext = format === "pdf" ? "pdf" : "png";
-  const filePath = path.join(process.cwd(), "public", "signage", `${params.venueId}.${ext}`);
+  const filePath = path.join(process.cwd(), "public", "signage", `${venueId}.${ext}`);
 
   try {
     const file = await fs.readFile(filePath);
     return new NextResponse(file, {
       headers: {
         "Content-Type": ext === "pdf" ? "application/pdf" : "image/png",
-        "Content-Disposition": `attachment; filename="${params.venueId}.${ext}"`,
+        "Content-Disposition": `attachment; filename="${venueId}.${ext}"`,
         "Cache-Control": "public, max-age=86400",
       },
     });

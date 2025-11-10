@@ -6,11 +6,11 @@ import { SlotsBoard } from "@/components/slots/slots-board";
 import { listSlots, getVenueById } from "@/lib/repositories/loop-repository";
 
 interface Props {
-  params: { venueId: string };
+  params: Promise<{ venueId: string }>;
 }
 
 export default async function VenueSlotsPage({ params }: Props) {
-  const { venueId } = params;
+  const { venueId } = await params;
   const venue = await getVenueById(venueId);
   if (!venue) return notFound();
   const slots = await listSlots(venue.id);

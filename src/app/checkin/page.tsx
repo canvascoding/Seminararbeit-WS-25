@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { listVenues, getVenueById } from "@/lib/repositories/loop-repository";
 
 interface Props {
-  searchParams?: { venue?: string };
+  searchParams?: Promise<{ venue?: string }>;
 }
 
 export default async function CheckInPage({ searchParams }: Props) {
-  const params = searchParams ?? {};
+  const params = (await searchParams) ?? {};
   const t = await getTranslations("checkin");
   const venues = await listVenues();
   const activeVenue = params.venue ? await getVenueById(params.venue) : null;
