@@ -7,6 +7,7 @@ const isProd = process.env.NODE_ENV === "production";
 const nextConfig: NextConfig = {
   typedRoutes: true,
   turbopack: {},
+  output: "standalone",
 };
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");

@@ -16,12 +16,15 @@ interface NavLink {
   labelKey: NavKey;
 }
 
+const DEFAULT_VENUE_ID = "mensa-nord";
+const DEFAULT_SLOT_PATH = `/slots/${DEFAULT_VENUE_ID}`;
+
 const links: NavLink[] = [
   { id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" },
   {
     id: "slots",
-    href: { pathname: "/slots/[venueId]", query: { venueId: "mensa-nord" } },
-    activePath: "/slots/mensa-nord",
+    href: DEFAULT_SLOT_PATH,
+    activePath: DEFAULT_SLOT_PATH,
     labelKey: "navSlots",
   },
   { id: "partner", href: "/partner", activePath: "/partner", labelKey: "navPartner" },
@@ -61,11 +64,7 @@ export function TopNav() {
           </Button>
           <Button variant="primary" asChild>
             <Link
-              href={
-                profile
-                  ? { pathname: "/slots/[venueId]", query: { venueId: "mensa-nord" } }
-                  : "/checkin"
-              }
+              href={profile ? DEFAULT_SLOT_PATH : "/checkin"}
             >
               {profile ? t("ctaStart") : t("navCheckIn")}
             </Link>
