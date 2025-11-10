@@ -21,7 +21,7 @@ type Mode = "signin" | "signup" | "magic";
 export function AuthPanel() {
   const t = useTranslations("auth");
   const { firebaseUser, profile, mockMode } = useAuth();
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>("magic");
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +46,6 @@ export function AuthPanel() {
           email: formData.get("email") as string,
           password: formData.get("password") as string,
           name: formData.get("name") as string,
-          university: formData.get("university") as string,
-          studyField: (formData.get("studyField") as string) || undefined,
         });
         setStatus(t("successSignup"));
       } else {
@@ -68,7 +66,6 @@ export function AuthPanel() {
           email: t("validationEmail"),
           password: t("validationPassword"),
           name: t("validationName"),
-          university: t("validationUniversity"),
         };
         if (typeof field === "string" && fieldMessages[field]) {
           setError(fieldMessages[field]);
@@ -159,25 +156,29 @@ export function AuthPanel() {
   }
 
   return (
-    <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-loop-card">
-      <div className="mb-4 flex gap-2">
+    <div className="rounded-2xl sm:rounded-3xl border border-white/60 bg-white/80 p-4 sm:p-6 shadow-loop-card">
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Button
+          variant={mode === "magic" ? "primary" : "ghost"}
+          onClick={() => setMode("magic")}
+          className="flex-1 min-w-[100px] text-xs sm:text-sm px-3 sm:px-4"
+        >
+          <span className="hidden min-[400px]:inline">Magic Link</span>
+          <span className="min-[400px]:hidden">Magic</span>
+        </Button>
         <Button
           variant={mode === "signin" ? "primary" : "ghost"}
           onClick={() => setMode("signin")}
+          className="flex-1 min-w-[100px] text-xs sm:text-sm px-3 sm:px-4"
         >
           {t("signIn")}
         </Button>
         <Button
           variant={mode === "signup" ? "primary" : "ghost"}
           onClick={() => setMode("signup")}
+          className="flex-1 min-w-[100px] text-xs sm:text-sm px-3 sm:px-4"
         >
           {t("signUp")}
-        </Button>
-        <Button
-          variant={mode === "magic" ? "primary" : "ghost"}
-          onClick={() => setMode("magic")}
-        >
-          Magic Link
         </Button>
       </div>
       <form className="space-y-3" onSubmit={handleSubmit}>
@@ -196,8 +197,6 @@ export function AuthPanel() {
         {mode === "signup" && (
           <>
             <Input name="name" placeholder={t("name")} required />
-            <Input name="university" placeholder={t("university")} required />
-            <Textarea name="studyField" placeholder={t("studyField")} />
           </>
         )}
         <Button type="submit" disabled={loading} fullWidth>

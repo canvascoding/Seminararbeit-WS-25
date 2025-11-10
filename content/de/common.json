@@ -16,6 +16,7 @@
   "navReport": "Safety",
   "footerLegal": "Datenschutz",
   "footerImprint": "Impressum",
+  "footerCookies": "Cookie-Richtlinie",
   "offlineTitle": "Loop benötigt kurz Internet",
   "offlineBody": "Sobald du wieder online bist, aktualisiere die Seite oder nutze den QR-Code erneut.",
   "mockWarning": "Firebase ist lokal nicht konfiguriert – es werden Demo-Daten angezeigt."

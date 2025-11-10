@@ -15,8 +15,6 @@ const signUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10),
   name: z.string().min(2),
-  university: z.string().min(2),
-  studyField: z.string().optional(),
 });
 
 const magicLinkSchema = z.object({
@@ -43,8 +41,6 @@ export async function signUp(payload: SignUpPayload) {
   await setDoc(doc(db, "users", credential.user.uid), {
     displayName: parsed.name,
     email: parsed.email,
-    university: parsed.university,
-    studyField: parsed.studyField ?? null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

@@ -20,22 +20,22 @@ export default async function CheckInPage({ searchParams }: Props) {
   return (
     <div className="min-h-screen bg-loop-sand">
       <TopNav />
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid gap-8 rounded-[40px] border border-white/80 bg-white/90 p-8 shadow-soft md:grid-cols-2">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-10">
+        <div className="grid gap-6 sm:gap-8 rounded-3xl sm:rounded-[40px] border border-white/80 bg-white/90 p-5 sm:p-8 shadow-soft md:grid-cols-2">
           <div>
-            <h1 className="text-3xl font-semibold text-loop-slate">{t("title")}</h1>
-            <div className="mt-6">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-loop-slate">{t("title")}</h1>
+            <div className="mt-4 sm:mt-6">
               <CheckInScanner initialVenueId={activeVenue?.id ?? undefined} />
             </div>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {activeVenue ? (
               <Card>
                 <Badge tone="success" className="mb-2 w-fit">
                   {activeVenue.name}
                 </Badge>
-                <p className="text-sm text-loop-slate/70">{activeVenue.address}</p>
-                <ul className="mt-4 space-y-2 text-sm text-loop-slate">
+                <p className="text-xs sm:text-sm text-loop-slate/70">{activeVenue.address}</p>
+                <ul className="mt-3 sm:mt-4 space-y-2 text-xs sm:text-sm text-loop-slate">
                   {activeVenue.meetPoints.map((point) => (
                     <li key={point.id}>
                       <strong>{point.label}:</strong> {point.description}
@@ -45,13 +45,13 @@ export default async function CheckInPage({ searchParams }: Props) {
               </Card>
             ) : (
               <Card>
-                <p className="text-sm text-loop-slate/70">{t("listLink")}</p>
-                <ul className="mt-4 space-y-2">
+                <p className="text-xs sm:text-sm text-loop-slate/70">{t("listLink")}</p>
+                <ul className="mt-3 sm:mt-4 space-y-2">
                   {venues.map((venue) => (
                     <li key={venue.id}>
                       <Link
                         href={`/checkin?venue=${venue.id}`}
-                        className="text-loop-green underline"
+                        className="text-sm sm:text-base text-loop-green underline min-h-[44px] inline-flex items-center"
                       >
                         {venue.name}
                       </Link>

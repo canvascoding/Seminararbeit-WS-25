@@ -173,27 +173,27 @@ export function WaitingRoom({
   const loops = data?.loops ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <Card>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-wide text-loop-slate/60">
+            <p className="text-xs sm:text-sm uppercase tracking-wide text-loop-slate/60">
               {t("roomLabel")}
             </p>
-            <p className="text-2xl font-semibold text-loop-slate">{roomId}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-loop-slate break-all">{roomId}</p>
             {venueName && (
-              <p className="text-sm text-loop-slate/60">
+              <p className="text-xs sm:text-sm text-loop-slate/60">
                 {t("roomVenue", { venue: venueName })}
               </p>
             )}
           </div>
           <div className="flex flex-col gap-2 md:w-1/2">
-            <label className="text-sm font-medium text-loop-slate">
+            <label className="text-xs sm:text-sm font-medium text-loop-slate">
               {t("shareLabel")}
             </label>
             <div className="flex gap-2">
-              <Input readOnly value={shareUrl} className="flex-1" />
-              <Button onClick={handleCopy} variant="ghost">
+              <Input readOnly value={shareUrl} className="flex-1 text-xs sm:text-sm" />
+              <Button onClick={handleCopy} variant="ghost" className="shrink-0">
                 {copied ? t("copied") : t("copy")}
               </Button>
             </div>
@@ -203,9 +203,9 @@ export function WaitingRoom({
       </Card>
 
       <Card className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-[2fr,1fr]">
           <div>
-            <label className="text-sm font-semibold text-loop-slate">
+            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
               {t("nameLabel")}
             </label>
             <Input
@@ -216,11 +216,11 @@ export function WaitingRoom({
             />
           </div>
           <div>
-            <label className="text-sm font-semibold text-loop-slate">
+            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
               {t("capacityLabel")}
             </label>
             <select
-              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm"
+              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
               value={capacity}
               onChange={(event) => handleCapacityChange(Number(event.target.value))}
             >
@@ -232,15 +232,15 @@ export function WaitingRoom({
             </select>
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button onClick={handleJoin}>{t("joinButton")}</Button>
           <Button variant="ghost" onClick={handleLeave}>
             {t("leaveButton")}
           </Button>
-          <Button variant="secondary" onClick={() => handleSpawn(1)}>
+          <Button variant="secondary" onClick={() => handleSpawn(1)} className="text-xs sm:text-sm">
             {t("spawnBot")}
           </Button>
-          <Button variant="secondary" onClick={() => handleSpawn(2)}>
+          <Button variant="secondary" onClick={() => handleSpawn(2)} className="text-xs sm:text-sm">
             {t("spawnBotMany")}
           </Button>
           <Button variant="ghost" onClick={handleReset}>
@@ -271,30 +271,30 @@ export function WaitingRoom({
         )}
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
         <Card>
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-loop-slate">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
               {t("participantsHeadline")}
             </h3>
             <Badge tone="neutral">
               {waiting.length} / {capacity}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-loop-slate/60">{t("demoNote")}</p>
-          <div className="mt-4 space-y-3">
+          <p className="mt-1 text-xs sm:text-sm text-loop-slate/60">{t("demoNote")}</p>
+          <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3">
             {waiting.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-4 py-3 text-sm text-loop-slate/70">
+              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
                 {t("emptyWaiting")}
               </p>
             )}
             {waiting.map((participant) => (
               <div
                 key={participant.userId}
-                className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/80 px-4 py-2"
+                className="flex items-center justify-between gap-2 rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-3 sm:px-4 py-2"
               >
-                <div>
-                  <p className="text-sm font-semibold text-loop-slate">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
                     {participant.alias}
                   </p>
                   <p className="text-xs text-loop-slate/50">
@@ -306,42 +306,42 @@ export function WaitingRoom({
                     })}
                   </p>
                 </div>
-                <Badge tone="success">{t("statusChipWaiting")}</Badge>
+                <Badge tone="success" className="shrink-0">{t("statusChipWaiting")}</Badge>
               </div>
             ))}
           </div>
         </Card>
 
         <Card>
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-loop-slate">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
               {t("loopsHeadline")}
             </h3>
             <Badge tone="success">{loops.length}</Badge>
           </div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3">
             {loops.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-4 py-3 text-sm text-loop-slate/70">
+              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
                 {t("emptyLoops")}
               </p>
             )}
             {loops.map((loop) => (
               <div
                 key={loop.id}
-                className="rounded-2xl border border-white/60 bg-white/80 px-4 py-3"
+                className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-3 sm:px-4 py-2 sm:py-3"
               >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-loop-slate">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
                     {t("loopLabel", { id: loop.id })}
                   </p>
-                  <Badge tone="neutral">
+                  <Badge tone="neutral" className="shrink-0 text-xs">
                     {new Date(loop.createdAt).toLocaleTimeString("de-DE", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </Badge>
                 </div>
-                <p className="mt-2 text-sm text-loop-slate/70">
+                <p className="mt-2 text-xs sm:text-sm text-loop-slate/70 break-words">
                   {loop.participants.map((p) => p.alias).join(", ")}
                 </p>
               </div>

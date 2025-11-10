@@ -88,27 +88,29 @@ export function SlotsBoard({ venue, initialSlots }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-3">
-        <Badge
-          tone={intentFilter === "all" ? "success" : "neutral"}
-          onClick={() => persistFilter("all")}
-          className="cursor-pointer"
-        >
-          {t("filterIntent")}
-        </Badge>
-        {intents.map((intent) => (
+    <div className="space-y-4 sm:space-y-6">
+      <div>
+        <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap">
           <Badge
-            key={intent.key}
-            tone={intentFilter === intent.key ? "success" : "neutral"}
-            className="cursor-pointer"
-            onClick={() => persistFilter(intent.key)}
+            tone={intentFilter === "all" ? "success" : "neutral"}
+            onClick={() => persistFilter("all")}
+            className="cursor-pointer shrink-0 touch-manipulation"
           >
-            {intent.label}
+            {t("filterIntent")}
           </Badge>
-        ))}
+          {intents.map((intent) => (
+            <Badge
+              key={intent.key}
+              tone={intentFilter === intent.key ? "success" : "neutral"}
+              className="cursor-pointer shrink-0 touch-manipulation"
+              onClick={() => persistFilter(intent.key)}
+            >
+              {intent.label}
+            </Badge>
+          ))}
+        </div>
+        <p className="text-xs text-loop-slate/60 mt-2">{t("persistedFilter")}</p>
       </div>
-      <p className="text-xs text-loop-slate/60">{t("persistedFilter")}</p>
 
       {limitReached && (
         <p className="rounded-2xl bg-loop-amber/30 px-4 py-3 text-sm text-loop-slate">
@@ -134,14 +136,14 @@ export function SlotsBoard({ venue, initialSlots }: Props) {
                 return (
                   <div
                     key={slot.id}
-                    className="rounded-3xl border border-white/80 bg-white/90 p-4 shadow-loop-card"
+                    className="rounded-2xl sm:rounded-3xl border border-white/80 bg-white/90 p-4 sm:p-5 shadow-loop-card"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div>
-                        <p className="text-lg font-semibold text-loop-slate">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base sm:text-lg font-semibold text-loop-slate">
                           {meta.label}
                         </p>
-                        <p className="text-sm text-loop-slate/70">
+                        <p className="text-xs sm:text-sm text-loop-slate/70 mt-0.5">
                           Start:{" "}
                           {new Date(slot.startAt).toLocaleTimeString("de-DE", {
                             hour: "2-digit",
@@ -150,12 +152,12 @@ export function SlotsBoard({ venue, initialSlots }: Props) {
                           · {slot.durationMinutes} Min
                         </p>
                       </div>
-                      <Badge tone="neutral">
+                      <Badge tone="neutral" className="self-start sm:self-auto shrink-0">
                         {t("capacity")}: {slot.restSeats ?? slot.capacity}
                       </Badge>
                     </div>
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-sm text-loop-slate/70">
+                    <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <p className="text-xs sm:text-sm text-loop-slate/70 min-w-0 break-words">
                         Treffpunkt:{" "}
                         {
                           venue.meetPoints.find(
@@ -164,7 +166,7 @@ export function SlotsBoard({ venue, initialSlots }: Props) {
                         }
                       </p>
                       {firebaseUser ? (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0">
                           <Button
                             variant="ghost"
                             disabled={!isPending}
@@ -180,7 +182,7 @@ export function SlotsBoard({ venue, initialSlots }: Props) {
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-sm text-loop-slate/60">
+                        <p className="text-xs sm:text-sm text-loop-slate/60">
                           Bitte zuerst einloggen.
                         </p>
                       )}
