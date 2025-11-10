@@ -1,0 +1,13 @@
+services:
+  loop-app:
+    build:
+      context: .
+    image: loop-app:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.runtime
+    environment:
+      NODE_ENV: production
+      PORT: 3000

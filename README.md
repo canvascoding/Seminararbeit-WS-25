@@ -26,6 +26,24 @@ Campus-PWA für spontane 5–15-Minuten-Begegnungen mit QR-Check-ins, Firebase-B
    Ohne Credentials läuft die App im Mock-Modus (Demo-Daten, keine Auth).
 3. `yarn dev` startet die PWA auf `http://localhost:3000`.
 
+Für Deployments gibt es zusätzlich die Datei `env.runtime.example`, die du als `.env.runtime` kopieren oder direkt in EasyPanel als Environment-Variablen hinterlegen kannst. Diese Werte werden erst beim Container-Start injiziert (Runtime-Loading), sodass der Build ohne Secrets funktioniert.
+
+## Deployment (Docker & EasyPanel)
+
+1. **Image bauen (lokal optional):**
+   ```sh
+   docker compose build
+   docker compose up -d
+   ```
+   Der Multi-Stage-`Dockerfile` erzeugt ein leichtgewichtiges Next.js-Standalone-Bundle; Environment-Variablen werden nicht ins Image aufgenommen.
+2. **Runtime-Variablen setzen:** Kopiere `env.runtime.example` nach `.env.runtime` oder trage die Keys direkt im EasyPanel UI ein. `docker-compose.yml` lädt diese Datei automatisch unter `env_file`, wodurch Variablen erst beim Start verfügbar sind.
+3. **EasyPanel-Stack anlegen:**
+   - Neues Projekt → Deployment via Git-Repo oder Tarball starten.
+   - Im „Docker Compose“ Feld den Inhalt der `docker-compose.yml` einfügen (oder Datei einlesen lassen).
+   - Unter „Environment“ sämtliche Produktiv-Keys aus `.env.runtime` hinterlegen.
+   - Port 3000 freigeben; EasyPanel kümmert sich um Reverse Proxy/SSL.
+4. **Deploy:** EasyPanel führt `docker compose pull && docker compose up -d` aus, wodurch das zuvor gebaute Image mit Runtime-Variablen gestartet wird. Änderungen an `.env.runtime` erfordern lediglich einen Restart (`docker compose up -d`), kein Rebuild.
+
 ## Nützliche Skripte
 | Zweck | Kommando |
 | --- | --- |

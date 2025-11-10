@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+out
+coverage
+*.log
+*.tsbuildinfo
+.env*
+Dockerfile
+docker-compose.yml
+.git
+.gitignore
+tmp
+**/.DS_Store
