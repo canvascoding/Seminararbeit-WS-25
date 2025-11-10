@@ -69,17 +69,26 @@ export function AuthProvider({ children }: PropsWithChildren) {
       let profile: UserProfile;
 
       if (!snapshot.exists()) {
-        profile = {
-          uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName ?? "",
-          email: firebaseUser.email ?? "",
-          university: "",
-        };
-        await setDoc(profileRef, {
-          ...profile,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
+        // Warte kurz, falls das Profil gerade von signUp() erstellt wird
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const retrySnapshot = await getDoc(profileRef);
+
+        if (!retrySnapshot.exists()) {
+          // Profil existiert immer noch nicht - erstelle Fallback
+          profile = {
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName ?? "",
+            email: firebaseUser.email ?? "",
+            university: "",
+          };
+          await setDoc(profileRef, {
+            ...profile,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          profile = retrySnapshot.data() as UserProfile;
+        }
       } else {
         profile = snapshot.data() as UserProfile;
       }

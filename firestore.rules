@@ -1,0 +1,107 @@
+// firestore.rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isPartner() {
+      // Nutze safe access für custom claims
+      return isSignedIn() && request.auth.token != null && request.auth.token.role == "partner";
+    }
+
+    //
+    // users/{uid}
+    //
+    match /users/{uid} {
+      allow read, update: if isOwner(uid);
+      // WICHTIG: Bei Registrierung ist email_verified noch false!
+      // Erlaube create wenn der User authentifiziert ist und die eigene UID verwendet
+      allow create: if isOwner(uid) &&
+        request.resource.data.keys().hasAll(["displayName", "email", "university", "updatedAt"]) &&
+        request.resource.data.email == request.auth.token.email;
+    }
+
+    //
+    // venues – public read, no client writes (nur Admin/Functions)
+    //
+    match /venues/{venueId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    //
+    // slots – public read, Partner-Slot-CRUD beschränkt auf eigene Venues
+    //
+    match /slots/{slotId} {
+      allow read: if true;
+
+      allow create, update: if isPartner() &&
+        // Stelle sicher, dass erforderliche Felder vorhanden und korrekt sind
+        request.resource.data.venueId is string &&
+        request.resource.data.durationMinutes is int &&
+        request.resource.data.capacity is int &&
+
+        // Prüfe Besitz des Venue via get() auf das einzelne Dokument
+        get(/databases/$(database)/documents/venues/$(request.resource.data.venueId)).data.partnerId == request.auth.uid &&
+
+        // Wertebereiche prüfen
+        request.resource.data.durationMinutes >= 10 &&
+        request.resource.data.durationMinutes <= 30 &&
+        request.resource.data.capacity >= 2 &&
+        request.resource.data.capacity <= 4;
+
+      allow delete: if false;
+    }
+
+    //
+    // slotAttendees/{slotId}/{userId}
+    //
+    match /slotAttendees/{slotId}/{userId} {
+      allow create: if isOwner(userId) &&
+        request.resource.data.keys().hasOnly(["slotId","userId","joinedAt","status"]) &&
+        request.resource.data.status == "pending";
+
+      allow update, delete: if isOwner(userId) &&
+        // Nur Änderungen vor Start erlaubt
+        get(/databases/$(database)/documents/slots/$(slotId)).data.startAt > request.time;
+
+      allow read: if isOwner(userId);
+    }
+
+    //
+    // loops – nur Teilnehmer:innen dürfen lesen, keine Client-Schreibrechte
+    //
+    match /loops/{loopId} {
+      allow read: if isSignedIn() &&
+        request.auth.uid in resource.data.participants;
+      allow write: if false;
+    }
+
+    //
+    // incidents – schreiben erlaubt, lesen nur Admin (per Cloud Function/API)
+    //
+    match /incidents/{incidentId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.keys().hasOnly(["loopId","reporterId","type","description","createdAt","status"]) &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.description.size() <= 500;
+      allow read: if false;
+      allow update, delete: if false;
+    }
+
+    //
+    // reports collection alias – falls /report API dediziert schreibt
+    //
+    match /reports/{docId} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

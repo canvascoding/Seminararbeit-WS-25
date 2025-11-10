@@ -75,6 +75,23 @@ export function AuthPanel() {
         } else {
           setError(issue?.message ?? t("errorGeneric"));
         }
+      } else if (err && typeof err === "object" && "code" in err) {
+        // Firebase Auth Fehler
+        const errorCode = (err as { code: string }).code;
+        switch (errorCode) {
+          case "auth/email-already-in-use":
+            setError(t("errorEmailInUse"));
+            break;
+          case "auth/wrong-password":
+          case "auth/invalid-credential":
+            setError(t("errorWrongPassword"));
+            break;
+          case "auth/user-not-found":
+            setError(t("errorUserNotFound"));
+            break;
+          default:
+            setError(t("errorGeneric"));
+        }
       } else {
         setError(t("errorGeneric"));
       }

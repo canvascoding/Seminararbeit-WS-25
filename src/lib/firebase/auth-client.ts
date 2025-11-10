@@ -39,11 +39,13 @@ export async function signUp(payload: SignUpPayload) {
     displayName: parsed.name,
   });
 
+  // Wichtig: Erst Firestore-Dokument schreiben, dann wird der AuthProvider getriggert
   await setDoc(doc(db, "users", credential.user.uid), {
     displayName: parsed.name,
     email: parsed.email,
     university: parsed.university,
     studyField: parsed.studyField ?? null,
+    createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
 

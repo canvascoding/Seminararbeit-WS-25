@@ -39,8 +39,8 @@ export default async function Home() {
             <p className="text-lg text-loop-slate/80">{t("heroSubline")}</p>
             <div className="flex flex-wrap gap-4">
               <Badge tone="neutral">QR · Check-in</Badge>
-              <Badge tone="neutral">5–15 Minuten</Badge>
-              <Badge tone="neutral">Deutschsprachig</Badge>
+              <Badge tone="neutral">Unkompliziert</Badge>
+              <Badge tone="neutral">Sozial</Badge>
             </div>
           </div>
           <div className="rounded-3xl border border-loop-green/30 bg-white/70 p-4">
