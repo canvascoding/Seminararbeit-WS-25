@@ -11,9 +11,12 @@
   "listLink": "Alle Orte anzeigen",
   "recentVenue": "Zuletzt eingecheckt",
   "intentPrompt": "Welche Art von Loop passt gerade?",
+  "intentPromptVenue": "Ort {{venueId}} erkannt. Wir bereiten alles vor …",
   "magicLinkConfirming": "Magic-Link wird bestätigt …",
   "magicLinkConfirmed": "Du bist eingeloggt – willkommen zurück!",
   "magicLinkEmailMissing": "Wir konnten deine E-Mail nicht erkennen. Bitte gib sie erneut ein.",
   "magicLinkConfirmError": "Link ungültig oder abgelaufen. Bitte fordere einen neuen Magic-Link an.",
-  "magicLinkPromptEmail": "Bitte bestätige deine E-Mail-Adresse für den Magic-Link."
+  "magicLinkPromptEmail": "Bitte bestätige deine E-Mail-Adresse für den Magic-Link.",
+  "waitingRoomRedirect": "Ort {{venueId}} erkannt. Weiterleitung in den Warteraum …",
+  "manualSuccess": "Manueller Check-in für {{venueId}} vorbereitet."
 }

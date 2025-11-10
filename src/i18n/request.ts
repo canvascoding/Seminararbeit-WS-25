@@ -8,6 +8,7 @@ export default getRequestConfig(async () => {
     slots: (await import("../../content/de/slots.json")).default,
     partner: (await import("../../content/de/partner.json")).default,
     safety: (await import("../../content/de/safety.json")).default,
+    waitingRoom: (await import("../../content/de/waiting-room.json")).default,
   };
 
   return {
