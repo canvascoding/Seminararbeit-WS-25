@@ -1,0 +1,22 @@
+{
+  "appName": "Loop",
+  "tagline": "Spontane Begegnungen auf dem Campus",
+  "heroPitch": "Check-in per QR, 5–15 Minuten Begegnung – ganz ohne Smalltalk-Zwang.",
+  "heroSubline": "12-Wochen-Pilot an der Uni Wuppertal: Fokus auf Sicherheit, Barrierefreiheit und klare Erwartungen.",
+  "ctaStart": "Loop starten",
+  "ctaPartner": "Partner:in werden",
+  "ctaReport": "Vorfall melden",
+  "metricsLoops": "Loops durchgeführt",
+  "metricsRetention": "D30-Retention",
+  "metricsVenues": "Aktive Orte",
+  "pilotBadge": "Pilot Wuppertal",
+  "navCheckIn": "Check-in",
+  "navSlots": "Slots",
+  "navPartner": "Partnerportal",
+  "navReport": "Safety",
+  "footerLegal": "Datenschutz",
+  "footerImprint": "Impressum",
+  "offlineTitle": "Loop benötigt kurz Internet",
+  "offlineBody": "Sobald du wieder online bist, aktualisiere die Seite oder nutze den QR-Code erneut.",
+  "mockWarning": "Firebase ist lokal nicht konfiguriert – es werden Demo-Daten angezeigt."
+}

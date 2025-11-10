@@ -1,0 +1,175 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/providers/auth-provider";
+import {
+  logout,
+  sendMagicLink,
+  signIn,
+  signUp,
+  updateUserProfile,
+} from "@/lib/firebase/auth-client";
+
+type Mode = "signin" | "signup" | "magic";
+
+export function AuthPanel() {
+  const t = useTranslations("auth");
+  const { firebaseUser, profile, mockMode } = useAuth();
+  const [mode, setMode] = useState<Mode>("signin");
+  const [status, setStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    setLoading(true);
+    setError(null);
+    setStatus(null);
+
+    try {
+      if (mode === "signin") {
+        await signIn(
+          formData.get("email") as string,
+          formData.get("password") as string,
+        );
+        setStatus("angemeldet");
+      } else if (mode === "signup") {
+        await signUp({
+          email: formData.get("email") as string,
+          password: formData.get("password") as string,
+          name: formData.get("name") as string,
+          university: formData.get("university") as string,
+          studyField: (formData.get("studyField") as string) || undefined,
+        });
+        setStatus(t("successSignup"));
+      } else {
+        await sendMagicLink(formData.get("email") as string);
+        setStatus(t("successMagic"));
+      }
+      e.currentTarget.reset();
+    } catch (err) {
+      console.error(err);
+      setError(t("errorGeneric"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (mockMode) {
+    return (
+      <div className="rounded-3xl border border-dashed border-loop-green px-6 py-5 text-sm text-loop-slate/80">
+        Firebase Demo-Modus aktiv. Authentifizierung ist lokal deaktiviert.
+      </div>
+    );
+  }
+
+  if (firebaseUser && profile) {
+    return (
+      <div className="rounded-3xl border border-white/80 bg-white/70 p-6 shadow-loop-card">
+        <p className="text-sm text-loop-slate/60">{firebaseUser.email}</p>
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            setLoading(true);
+            try {
+              await updateUserProfile({
+                uid: profile.uid,
+                displayName: (formData.get("name") as string) ?? profile.displayName,
+                studyField: (formData.get("studyField") as string) || undefined,
+              });
+              setStatus(t("updateProfile"));
+            } catch (err) {
+              console.error(err);
+              setError(t("errorGeneric"));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          <Input
+            name="name"
+            defaultValue={profile.displayName}
+            placeholder={t("name")}
+          />
+          <Input
+            name="studyField"
+            defaultValue={profile.studyField}
+            placeholder={t("studyField")}
+          />
+          <Button disabled={loading}>{t("updateProfile")}</Button>
+        </form>
+        <Button
+          variant="ghost"
+          className="mt-4"
+          onClick={() => logout()}
+        >
+          {t("logout")}
+        </Button>
+        {status && <p className="mt-2 text-xs text-loop-green">{status}</p>}
+        {error && <p className="mt-2 text-xs text-loop-rose">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-loop-card">
+      <div className="mb-4 flex gap-2">
+        <Button
+          variant={mode === "signin" ? "primary" : "ghost"}
+          onClick={() => setMode("signin")}
+        >
+          {t("signIn")}
+        </Button>
+        <Button
+          variant={mode === "signup" ? "primary" : "ghost"}
+          onClick={() => setMode("signup")}
+        >
+          {t("signUp")}
+        </Button>
+        <Button
+          variant={mode === "magic" ? "primary" : "ghost"}
+          onClick={() => setMode("magic")}
+        >
+          Magic Link
+        </Button>
+      </div>
+      <form className="space-y-3" onSubmit={handleSubmit}>
+        {(mode === "signin" || mode === "signup" || mode === "magic") && (
+          <Input name="email" type="email" placeholder={t("email")} required />
+        )}
+        {(mode === "signin" || mode === "signup") && (
+          <Input
+            name="password"
+            type="password"
+            minLength={10}
+            placeholder={t("password")}
+            required
+          />
+        )}
+        {mode === "signup" && (
+          <>
+            <Input name="name" placeholder={t("name")} required />
+            <Input name="university" placeholder={t("university")} required />
+            <Textarea name="studyField" placeholder={t("studyField")} />
+          </>
+        )}
+        <Button type="submit" disabled={loading} fullWidth>
+          {mode === "signin"
+            ? t("signIn")
+            : mode === "signup"
+              ? t("signUp")
+              : t("magicLink")}
+        </Button>
+      </form>
+      {status && <p className="mt-2 text-xs text-loop-green">{status}</p>}
+      {error && <p className="mt-2 text-xs text-loop-rose">{error}</p>}
+    </div>
+  );
+}

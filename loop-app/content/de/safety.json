@@ -1,0 +1,20 @@
+{
+  "reportTitle": "Vorfall melden",
+  "reportSubtitle": "Wir melden uns innerhalb von 24 Stunden und sperren auffällige Profile sofort.",
+  "loopId": "Loop-ID",
+  "type": "Kategorie",
+  "description": "Was ist passiert?",
+  "hint": "Keine personenbezogenen Daten anderer Personen eingeben.",
+  "submit": "Meldung senden",
+  "success": "Danke für dein Vertrauen – wir kümmern uns darum.",
+  "options": {
+    "safety": "Safety",
+    "noShow": "No-Show",
+    "other": "Sonstiges"
+  },
+  "resources": [
+    "Bei akuter Gefahr immer 112 wählen.",
+    "Campus-Security: +49 202 439-1234 (24/7)",
+    "Psychologische Beratung: beratung@uni-wuppertal.de"
+  ]
+}

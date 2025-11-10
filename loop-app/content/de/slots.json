@@ -1,0 +1,22 @@
+{
+  "title": "Slots am Campus",
+  "subtitle": "Gefiltert nach Intent und Startzeit. Aktualisiert sich automatisch.",
+  "filterIntent": "Intent",
+  "filterStart": "Startzeit",
+  "groupNow": "Jetzt",
+  "groupSoon": "In 15 Minuten",
+  "groupLater": "Später",
+  "actionJoin": "Teilnehmen",
+  "actionCancel": "Absagen",
+  "limitReached": "Maximal drei offene Slots gleichzeitig.",
+  "empty": "Gerade keine Slots verfügbar – prüfe später oder wähle einen anderen Ort.",
+  "persistedFilter": "Filter gespeichert für diese Sitzung.",
+  "capacity": "Restplätze",
+  "duration": "Dauer",
+  "toastJoined": "Du bist vorgemerkt. Wir matchen dich, sobald genug Personen eingecheckt haben.",
+  "toastCanceled": "Slot wurde storniert.",
+  "intentSmalltalk": "Smalltalk",
+  "intentCoStudy": "Co-Study",
+  "intentWalkTalk": "Walk & Talk",
+  "intentCoffeeBreak": "Kaffee & kurze Pause"
+}

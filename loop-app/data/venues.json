@@ -1,0 +1,17 @@
+[
+  {
+    "venueId": "mensa-nord",
+    "name": "Mensa Nord",
+    "url": "https://loop.app/checkin?venue=mensa-nord"
+  },
+  {
+    "venueId": "bib-sued",
+    "name": "Bibliothek Süd",
+    "url": "https://loop.app/checkin?venue=bib-sued"
+  },
+  {
+    "venueId": "campus-garten",
+    "name": "Campus Garten",
+    "url": "https://loop.app/checkin?venue=campus-garten"
+  }
+]

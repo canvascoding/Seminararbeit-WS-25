@@ -1,0 +1,23 @@
+{
+  "title": "Partnerportal",
+  "subtitle": "Verwalte Slots, lade Signage herunter und tracke No-Shows.",
+  "empty": "Noch keine Orte verknüpft.",
+  "ctaCreate": "Neuen Slot planen",
+  "downloadSignage": "QR-Signage herunterladen",
+  "metrics": {
+    "attendance": "Teilnahmen diese Woche",
+    "noShow": "No-Show-Quote",
+    "nps": "Partner-NPS"
+  },
+  "form": {
+    "venue": "Ort",
+    "intent": "Intent",
+    "start": "Start",
+    "duration": "Dauer (Min)",
+    "capacity": "Plätze",
+    "meetPoint": "Treffpunkt",
+    "submit": "Slot speichern"
+  },
+  "success": "Slot gespeichert.",
+  "error": "Slot konnte nicht gespeichert werden."
+}

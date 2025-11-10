@@ -1,0 +1,17 @@
+{
+  "name": "Loop",
+  "short_name": "Loop",
+  "description": "Loop verbindet Studierende über spontane Slots.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F3EA",
+  "theme_color": "#78BE20",
+  "lang": "de-DE",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

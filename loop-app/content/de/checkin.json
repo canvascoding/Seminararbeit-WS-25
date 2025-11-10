@@ -1,0 +1,14 @@
+{
+  "title": "QR-Check-in",
+  "cameraPreparing": "Kamera wird vorbereitet…",
+  "cameraError": "Wir brauchen Zugriff auf die Kamera, um den QR-Code zu scannen.",
+  "manualHeadline": "Code manuell eingeben",
+  "manualLabelVenue": "Ort",
+  "manualLabelSlot": "Slot-Code",
+  "manualSubmit": "Check-in starten",
+  "invalidCode": "Der QR-Code gehört zu keinem aktiven Loop-Ort.",
+  "offline": "Keine Verbindung. Wir speichern den Versuch und erinnern dich, sobald du wieder online bist.",
+  "listLink": "Alle Orte anzeigen",
+  "recentVenue": "Zuletzt eingecheckt",
+  "intentPrompt": "Welche Art von Loop passt gerade?"
+}
