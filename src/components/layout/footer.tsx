@@ -9,10 +9,10 @@ export async function Footer() {
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-2">
         <div>
           <p className="text-sm text-loop-slate/70">
-            Loop Pilot · Region Wuppertal · Campus-Programm 2025
+            Loop Pilot · BUW Wuppertal · Campus-Programm 2025
           </p>
           <p className="text-sm text-loop-slate/70">
-            Support: hello@loop.app · Telegram @loopcampus
+            Support: info@canvas.holdings
           </p>
         </div>
         <div className="flex gap-4 text-sm text-loop-slate/70 md:justify-end">

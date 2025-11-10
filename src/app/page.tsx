@@ -10,7 +10,7 @@ type StatKey = "metricsLoops" | "metricsRetention" | "metricsVenues";
 
 const stats: { labelKey: StatKey; value: string }[] = [
   { labelKey: "metricsLoops", value: "12.480" },
-  { labelKey: "metricsRetention", value: "27 %" },
+  { labelKey: "metricsRetention", value: "Hoch" },
   { labelKey: "metricsVenues", value: "28" },
 ];
 

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useTranslations } from "next-intl";
+import { ZodError } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -60,7 +61,23 @@ export function AuthPanel() {
       form.reset();
     } catch (err) {
       console.error(err);
-      setError(t("errorGeneric"));
+      if (err instanceof ZodError) {
+        const issue = err.issues[0];
+        const field = issue?.path?.[0];
+        const fieldMessages: Record<string, string> = {
+          email: t("validationEmail"),
+          password: t("validationPassword"),
+          name: t("validationName"),
+          university: t("validationUniversity"),
+        };
+        if (typeof field === "string" && fieldMessages[field]) {
+          setError(fieldMessages[field]);
+        } else {
+          setError(issue?.message ?? t("errorGeneric"));
+        }
+      } else {
+        setError(t("errorGeneric"));
+      }
     } finally {
       setLoading(false);
     }
