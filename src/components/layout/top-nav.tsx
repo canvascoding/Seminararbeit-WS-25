@@ -3,9 +3,10 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, LogIn, Play, MapPin } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/providers/auth-provider";
@@ -21,6 +22,7 @@ interface NavLink {
 }
 
 const DEFAULT_VENUE_ID = "mensa-nord";
+const CHECKIN_NOTICE_STORAGE_KEY = "requireCheckInBeforeSlots";
 type VenueChangeDetail = {
   venueId?: string;
   venueName?: string;
@@ -29,11 +31,33 @@ type VenueChangeDetail = {
 export function TopNav() {
   const t = useTranslations("common");
   const pathname = usePathname();
+  const router = useRouter();
   const { profile, mockMode } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentVenueId, setCurrentVenueId] = useState<string>(DEFAULT_VENUE_ID);
   const [currentVenueName, setCurrentVenueName] = useState<string | null>(null);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [showCheckInNotice, setShowCheckInNotice] = useState(false);
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const displayCheckInNotice = useCallback(() => {
+    setShowCheckInNotice(true);
+    if (noticeTimeoutRef.current) {
+      clearTimeout(noticeTimeoutRef.current);
+    }
+    noticeTimeoutRef.current = setTimeout(() => {
+      setShowCheckInNotice(false);
+    }, 5000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (noticeTimeoutRef.current) {
+        clearTimeout(noticeTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   // Read the checked-in venue from sessionStorage on mount
   useEffect(() => {
@@ -74,24 +98,53 @@ export function TopNav() {
     };
   }, [profile]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldShowNotice = window.sessionStorage.getItem(CHECKIN_NOTICE_STORAGE_KEY);
+    if (shouldShowNotice) {
+      window.sessionStorage.removeItem(CHECKIN_NOTICE_STORAGE_KEY);
+      displayCheckInNotice();
+    }
+  }, [displayCheckInNotice]);
+
   const slotPath = `/slots/${currentVenueId}` as Route;
+  const startPath = profile ? ((isCheckedIn ? slotPath : "/checkin") as Route) : ("/" as Route);
+  const slotsLinkHref = startPath;
   const venueLabel = currentVenueName ?? t("navVenueUnknown");
   const venueAriaLabel = currentVenueName
     ? t("navVenueActive", { venue: currentVenueName })
     : t("navVenueUnknown");
+  const requiresCheckInBeforeSlots = Boolean(profile && !isCheckedIn);
 
   const shouldShowCheckInLink = !profile || !isCheckedIn;
+  const userRole = profile?.role;
+  const isAdmin = userRole === "admin";
+  const isPartner = userRole === "partner";
+  const handleSlotsClick = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>) => {
+      if (!requiresCheckInBeforeSlots) return;
+      event.preventDefault();
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(CHECKIN_NOTICE_STORAGE_KEY, "true");
+      }
+      displayCheckInNotice();
+      router.push("/checkin");
+    },
+    [requiresCheckInBeforeSlots, displayCheckInNotice, router]
+  );
+
   const links: NavLink[] = [
     ...(shouldShowCheckInLink ? [{ id: "checkin", href: "/checkin" as Route, activePath: "/checkin", labelKey: "navCheckIn" as NavKey }] : []),
     {
       id: "slots",
-      href: slotPath,
+      href: slotsLinkHref,
       activePath: slotPath,
       labelKey: "navSlots" as NavKey,
     },
-    { id: "venues", href: "/venues" as Route, activePath: "/venues", labelKey: "navVenues" as NavKey },
-    { id: "partner", href: "/partner" as Route, activePath: "/partner", labelKey: "navPartner" as NavKey },
-    { id: "report", href: "/report" as Route, activePath: "/report", labelKey: "navReport" as NavKey },
+    // "Orte" nur für Admins anzeigen
+    ...(isAdmin ? [{ id: "venues", href: "/venues" as Route, activePath: "/venues", labelKey: "navVenues" as NavKey }] : []),
+    // "Partnerportal" für Admins und Partner anzeigen
+    ...(isAdmin || isPartner ? [{ id: "partner", href: "/partner" as Route, activePath: "/partner", labelKey: "navPartner" as NavKey }] : []),
   ];
 
   return (
@@ -106,9 +159,8 @@ export function TopNav() {
             <Menu className="h-5 w-5 text-loop-slate" />
           </button>
           <Link href="/" className="flex items-center gap-1.5 sm:gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-loop-green px-2 py-0.5 text-[9px] sm:text-[10px] text-white font-medium uppercase tracking-wider">
-              <span className="hidden xs:inline">{t("pilotBadge")}</span>
-              <span className="xs:hidden">Pilot</span>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-loop-green px-2 py-0.5 text-[10px] text-white font-medium uppercase tracking-wider">
+              {t("pilotBadge")}
             </span>
             <span className="font-semibold text-base sm:text-lg text-loop-slate">Loop</span>
           </Link>
@@ -119,6 +171,9 @@ export function TopNav() {
             <Link
               key={link.id}
               href={link.href}
+              onClick={(event) => {
+                if (link.id === "slots") handleSlotsClick(event);
+              }}
               className={
                 pathname === link.activePath ? "text-loop-green font-semibold" : "hover:text-loop-green transition-colors"
               }
@@ -128,15 +183,15 @@ export function TopNav() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <Link
             href="/checkin"
-            className="inline-flex items-center gap-1.5 rounded-full border border-loop-slate/40 px-3 py-1 text-xs text-loop-slate transition-colors hover:border-loop-green hover:text-loop-green sm:text-sm"
+            className="inline-flex items-center gap-1.5 rounded-full border border-loop-slate/40 px-3 py-1 text-xs text-loop-slate transition-colors hover:border-loop-green hover:text-loop-green sm:text-sm max-w-[120px] sm:max-w-[180px] min-w-0"
             aria-label={venueAriaLabel}
             title={venueAriaLabel}
           >
-            <MapPin className="h-3.5 w-3.5 text-loop-green" />
-            <span className="whitespace-nowrap">{venueLabel}</span>
+            <MapPin className="h-3.5 w-3.5 text-loop-green flex-shrink-0" />
+            <span className="truncate min-w-0 block">{venueLabel}</span>
           </Link>
           <Button variant="ghost" asChild className="hidden sm:inline-flex">
             <Link href="/report">{t("ctaReport")}</Link>
@@ -146,7 +201,7 @@ export function TopNav() {
             asChild
             className="text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 min-w-0"
           >
-            <Link href={profile ? slotPath : "/"} className="flex items-center gap-1.5">
+            <Link href={startPath} className="flex items-center gap-1.5">
               {profile ? (
                 <>
                   <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-current" />
@@ -168,6 +223,11 @@ export function TopNav() {
           {t("mockWarning")}
         </div>
       )}
+      {showCheckInNotice && (
+        <div className="bg-loop-green/10 px-4 py-1 text-center text-xs text-loop-green">
+          {t("navSlotsCheckInNotice")}
+        </div>
+      )}
 
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen} side="left">
         <div className="flex flex-col gap-6 pt-8">
@@ -177,7 +237,10 @@ export function TopNav() {
               <Link
                 key={link.id}
                 href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
+                onClick={(event) => {
+                  if (link.id === "slots") handleSlotsClick(event);
+                  setMobileMenuOpen(false);
+                }}
                 className={`rounded-xl px-4 py-3 text-base font-medium transition-colors ${
                   pathname === link.activePath
                     ? "bg-loop-green text-white"

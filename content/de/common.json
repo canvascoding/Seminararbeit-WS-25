@@ -17,6 +17,7 @@
   "navReport": "Safety",
   "navVenueActive": "Eingecheckt: {venue}",
   "navVenueUnknown": "Ort wählen",
+  "navSlotsCheckInNotice": "Bitte zuerst per QR-Code einchecken, bevor du dir Slots ansiehst.",
   "footerLegal": "Datenschutz",
   "footerImprint": "Impressum",
   "footerCookies": "Cookie-Richtlinie",

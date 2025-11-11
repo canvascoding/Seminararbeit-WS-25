@@ -43,6 +43,8 @@ export function AuthPanel() {
         };
         await signIn(payload);
         setStatus("Erfolgreich angemeldet");
+        // Seite neu laden, damit der angemeldete Status angezeigt wird
+        window.location.reload();
       } else if (mode === "signup") {
         const password = formData.get("password") as string;
         const passwordConfirm = formData.get("passwordConfirm") as string;

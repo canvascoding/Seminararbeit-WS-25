@@ -264,7 +264,7 @@ export function CheckInScanner({
         {status === "loading"
           ? t("cameraPreparing")
           : lastDetectedVenue
-            ? t("intentPromptVenue", { venueId: lastDetectedVenue })
+            ? t("intentPromptVenue", { venueId: activeVenueName ?? venues.find(v => v.id === lastDetectedVenue)?.name ?? lastDetectedVenue })
             : t("intentPrompt")}
       </p>
       {offline && (
