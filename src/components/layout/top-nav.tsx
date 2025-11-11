@@ -11,7 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/providers/auth-provider";
 
-type NavKey = "navCheckIn" | "navSlots" | "navVenues" | "navPartner" | "navReport";
+type NavKey =
+  | "navCheckIn"
+  | "navSlots"
+  | "navLoops"
+  | "navVenues"
+  | "navPartner"
+  | "navReport";
 type LinkHref = Parameters<typeof Link>[0]["href"];
 
 interface NavLink {
@@ -141,6 +147,16 @@ export function TopNav() {
       activePath: slotPath,
       labelKey: "navSlots" as NavKey,
     },
+    ...(profile
+      ? [
+          {
+            id: "loops",
+            href: "/loop-center" as Route,
+            activePath: "/loop-center",
+            labelKey: "navLoops" as NavKey,
+          },
+        ]
+      : []),
     // "Orte" nur für Admins anzeigen
     ...(isAdmin ? [{ id: "venues", href: "/venues" as Route, activePath: "/venues", labelKey: "navVenues" as NavKey }] : []),
     // "Partnerportal" für Admins und Partner anzeigen

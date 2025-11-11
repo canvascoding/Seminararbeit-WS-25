@@ -37,8 +37,8 @@ export default async function WaitingRoomPage({ searchParams }: Props) {
     <AuthGuard>
       <div className="min-h-screen bg-loop-sand">
         <TopNav />
-        <main className="mx-auto max-w-4xl px-4 py-10">
-          <div className="rounded-[40px] border border-white/80 bg-white/90 p-8 shadow-soft">
+        <main className="mx-auto max-w-4xl px-6 py-10">
+          <div className="rounded-[40px] border border-white/80 bg-white/90 p-5 sm:p-8 shadow-soft">
             <h1 className="text-3xl font-semibold text-loop-slate">
               {t("title")}
             </h1>
@@ -52,6 +52,7 @@ export default async function WaitingRoomPage({ searchParams }: Props) {
                 roomId={roomId}
                 venueName={venue?.name}
                 venueId={venue?.id}
+                venueGeo={venue?.geo}
                 meetPoints={venue?.meetPoints ?? []}
                 defaultCapacity={defaultCapacity}
               />

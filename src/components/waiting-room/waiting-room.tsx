@@ -1,18 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/providers/auth-provider";
 
 interface WaitingParticipant {
   userId: string;
   alias: string;
   joinedAt: string;
+  email?: string | null;
+}
+
+interface LoopMessage {
+  id: string;
+  userId: string;
+  alias: string;
+  text: string;
+  sentAt: string;
+}
+
+type FeedbackRating = "great" | "ok" | "bad";
+
+interface LoopFeedback {
+  rating: FeedbackRating;
+  note?: string | null;
+  submittedAt?: string | null;
+  submittedBy?: string | null;
 }
 
 interface WaitingLoop {
@@ -31,11 +57,14 @@ interface WaitingLoop {
   status?: "waitingRoom" | "active" | "inProgress" | "completed";
   durationMinutes?: number;
   autoClosed?: boolean;
+  messages?: LoopMessage[];
+  feedback?: LoopFeedback | null;
 }
 
 interface WaitingRoomSnapshot {
   roomId: string;
   capacity: number;
+  capacityConfirmed?: boolean;
   waiting: WaitingParticipant[];
   loops: WaitingLoop[];
   lastUpdated: string;
@@ -45,18 +74,23 @@ interface WaitingRoomSnapshot {
   ownerName?: string | null;
   status?: "waitingRoom" | "active" | "completed";
   venueId?: string | null;
+  venueName?: string | null;
+  setupComplete?: boolean;
 }
 
 interface MeetingPointOption {
   id: string;
   label: string;
   description?: string;
+  instructions?: string;
+  geoOffset?: { lat: number; lng: number };
 }
 
 interface WaitingRoomProps {
   roomId: string;
   venueName?: string | null;
   venueId?: string | null;
+  venueGeo?: { lat: number; lng: number } | null;
   defaultCapacity: number;
   meetPoints?: MeetingPointOption[];
 }
@@ -102,6 +136,7 @@ export function WaitingRoom({
   roomId,
   venueName,
   venueId,
+  venueGeo,
   defaultCapacity,
   meetPoints = [],
 }: WaitingRoomProps) {
@@ -113,12 +148,21 @@ export function WaitingRoom({
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [capacity, setCapacity] = useState(defaultCapacity);
+  const [capacitySelection, setCapacitySelection] = useState<string>("");
   const [updatingCapacity, setUpdatingCapacity] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedMeetPointId, setSelectedMeetPointId] = useState<string>("");
   const [scheduleInput, setScheduleInput] = useState(() =>
     formatInputValue(new Date()),
   );
+  const [chatMessage, setChatMessage] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
+  const [chatNotice, setChatNotice] = useState<string | null>(null);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState<FeedbackRating | "">("");
+  const [feedbackNotes, setFeedbackNotes] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const userId = firebaseUser?.uid ?? localMockUserId;
   const ownerName = useMemo(() => {
     if (profile?.displayName) return profile.displayName;
@@ -179,10 +223,25 @@ export function WaitingRoom({
   });
 
   useEffect(() => {
-    if (data?.capacity && data.capacity !== capacity && !updatingCapacity) {
+    if (
+      typeof data?.capacity === "number" &&
+      data.capacity !== capacity &&
+      !updatingCapacity
+    ) {
       setCapacity(data.capacity);
     }
   }, [data?.capacity, capacity, updatingCapacity]);
+
+  useEffect(() => {
+    if (!data || updatingCapacity) return;
+    if (data.capacityConfirmed) {
+      setCapacitySelection(
+        typeof data.capacity === "number" ? String(data.capacity) : "",
+      );
+    } else {
+      setCapacitySelection("");
+    }
+  }, [data?.capacity, data?.capacityConfirmed, updatingCapacity]);
 
   useEffect(() => {
     if (data?.meetingPoint?.id) {
@@ -196,6 +255,10 @@ export function WaitingRoom({
     }
   }, [data?.scheduledAt]);
 
+  const setupComplete = data?.setupComplete ?? false;
+  const capacityConfirmed = data?.capacityConfirmed ?? false;
+  const waitingRoomLocked = !setupComplete;
+
   const mutateRoom = useCallback(
     async (body: Record<string, unknown>) => {
       setError(null);
@@ -206,6 +269,8 @@ export function WaitingRoom({
       if (userId) payload.userId = userId;
       if (ownerName) payload.ownerName = ownerName;
       if (venueId) payload.venueId = venueId;
+      const resolvedVenueName = data?.venueName ?? venueName;
+      if (resolvedVenueName) payload.venueName = resolvedVenueName;
       const response = await fetch("/api/test/waiting-room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -226,7 +291,7 @@ export function WaitingRoom({
       }
       await refetch();
     },
-    [ownerName, refetch, roomId, t, userId, venueId],
+    [data?.venueName, ownerName, refetch, roomId, t, userId, venueId, venueName],
   );
 
   useEffect(() => {
@@ -252,27 +317,23 @@ export function WaitingRoom({
       setError(t("missingName"));
       return;
     }
+    if (waitingRoomLocked) {
+      setError(
+        isOwner ? t("setupOwnerNotice") : t("setupGuestNotice"),
+      );
+      return;
+    }
     setInfo(null);
     try {
       await mutateRoom({
         action: "join",
         displayName: displayName.trim(),
+        email: profile?.email ?? firebaseUser?.email ?? "",
       });
       if (typeof window !== "undefined") {
         window.localStorage.setItem("loopTestUserName", displayName.trim());
       }
       setInfo(t("joinQueued"));
-    } catch {
-      // handled in mutateRoom
-    }
-  }
-
-  async function handleLeave() {
-    if (!userId) return;
-    setInfo(null);
-    try {
-      await mutateRoom({ action: "leave" });
-      setInfo(t("leftRoom"));
     } catch {
       // handled in mutateRoom
     }
@@ -289,12 +350,21 @@ export function WaitingRoom({
     }
   }
 
-  async function handleCapacityChange(value: number) {
+  async function handleCapacityChange(value: string) {
     if (!isOwner) return;
-    setCapacity(value);
+    if (!value) {
+      setCapacitySelection("");
+      return;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return;
+    }
+    setCapacity(numeric);
+    setCapacitySelection(value);
     setUpdatingCapacity(true);
     try {
-      await mutateRoom({ action: "configure", capacity: value });
+      await mutateRoom({ action: "configure", capacity: numeric });
     } catch {
       // handled
     } finally {
@@ -353,21 +423,14 @@ export function WaitingRoom({
 
   async function handleStartLoop() {
     if (!isOwner) return;
+    if (waitingRoomLocked) {
+      setError(t("setupOwnerNotice"));
+      return;
+    }
     setInfo(null);
     try {
       await mutateRoom({ action: "startLoop" });
       setInfo(t("loopStarted"));
-    } catch {
-      // handled
-    }
-  }
-
-  async function handleEndLoop(loopId: string) {
-    if (!isOwner) return;
-    setInfo(null);
-    try {
-      await mutateRoom({ action: "endLoop", loopId });
-      setInfo(t("loopEnded"));
     } catch {
       // handled
     }
@@ -386,18 +449,80 @@ export function WaitingRoom({
     setTimeout(() => setCopied(false), 1_500);
   }
 
+  async function handleSendChatMessage(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!matchedLoop || !chatMessage.trim()) {
+      return;
+    }
+    setChatNotice(null);
+    setSendingChat(true);
+    try {
+      await mutateRoom({
+        action: "chat",
+        loopId: matchedLoop.id,
+        message: chatMessage.trim(),
+      });
+      setChatMessage("");
+    } catch {
+      setChatNotice(t("chatError"));
+    } finally {
+      setSendingChat(false);
+    }
+  }
+
+  async function handleSubmitFeedback(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!matchedLoop || !isOwner) {
+      return;
+    }
+    if (!feedbackRating) {
+      setFeedbackError(t("feedbackMissingRating"));
+      return;
+    }
+    setFeedbackSubmitting(true);
+    setFeedbackError(null);
+    try {
+      await mutateRoom({
+        action: "endLoop",
+        loopId: matchedLoop.id,
+        feedbackRating,
+        feedbackNote: feedbackNotes.trim(),
+      });
+      setFeedbackVisible(false);
+      setFeedbackRating("");
+      setFeedbackNotes("");
+      setInfo(t("loopEnded"));
+    } catch {
+      setFeedbackError(t("feedbackSubmitError"));
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }
+
   const matchedLoop = useMemo(() => {
     if (!userId || !data) return null;
     return (
       data.loops.find(
         (loop) =>
-          loop.participantIds.includes(userId) && loop.status !== "completed",
+          loop.status !== "completed" &&
+          (loop.participantIds.includes(userId) || loop.ownerId === userId),
       ) ?? null
     );
   }, [data, userId]);
 
+  useEffect(() => {
+    setChatNotice(null);
+    setChatMessage("");
+    setFeedbackVisible(false);
+    setFeedbackRating("");
+    setFeedbackNotes("");
+    setFeedbackError(null);
+  }, [matchedLoop?.id]);
+
   const isWaiting =
     !!userId && !!data?.waiting?.some((attendee) => attendee.userId === userId);
+
+  const resolvedVenueName = data?.venueName ?? venueName ?? null;
 
   const ownerId = data?.ownerId ?? null;
   const ownerDisplayName = data?.ownerName ?? null;
@@ -432,9 +557,71 @@ export function WaitingRoom({
       second: "2-digit",
     });
   }, [data?.lastUpdated]);
+  const setupNotice = waitingRoomLocked
+    ? isOwner
+      ? t("setupOwnerNotice")
+      : t("setupGuestNotice")
+    : null;
+  const joinDisabled = !displayName.trim() || waitingRoomLocked;
+  const canSendChat = Boolean(chatMessage.trim()) && !sendingChat;
+
+  const activeMessages = useMemo(() => {
+    if (!matchedLoop?.messages) return [];
+    return [...matchedLoop.messages].sort(
+      (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+    );
+  }, [matchedLoop?.messages]);
+
+  const activeMeetPointOption = useMemo(() => {
+    if (!matchedLoop?.meetingPoint?.id) return null;
+    return (
+      meetPoints.find((point) => point.id === matchedLoop.meetingPoint?.id) ?? null
+    );
+  }, [matchedLoop?.meetingPoint?.id, meetPoints]);
+
+  const mapQuery = useMemo(() => {
+    if (!matchedLoop?.meetingPoint?.label) return null;
+    const coords = activeMeetPointOption?.geoOffset ?? venueGeo ?? null;
+    if (
+      coords &&
+      typeof coords.lat === "number" &&
+      typeof coords.lng === "number"
+    ) {
+      return `${coords.lat},${coords.lng}`;
+    }
+    const parts = [
+      resolvedVenueName,
+      matchedLoop.meetingPoint.label,
+      matchedLoop.meetingPoint.description,
+    ].filter(Boolean);
+    return parts.length ? parts.join(" ") : null;
+  }, [
+    activeMeetPointOption?.geoOffset,
+    matchedLoop?.meetingPoint?.description,
+    matchedLoop?.meetingPoint?.label,
+    venueGeo,
+    resolvedVenueName,
+  ]);
+
+  const mapSrc = mapQuery
+    ? `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
+    : null;
+  const selectedMeetingPoint = useMemo(
+    () => meetPoints.find((point) => point.id === selectedMeetPointId) ?? null,
+    [meetPoints, selectedMeetPointId],
+  );
+  const feedbackOptions = useMemo(
+    () => [
+      { value: "great" as FeedbackRating, label: t("feedbackOptionGreat") },
+      { value: "ok" as FeedbackRating, label: t("feedbackOptionOk") },
+      { value: "bad" as FeedbackRating, label: t("feedbackOptionBad") },
+    ],
+    [t],
+  );
 
   const canStartLoop =
     isOwner &&
+    setupComplete &&
     roomStatus === "waitingRoom" &&
     waiting.length >= 2 &&
     !!data?.meetingPoint?.label &&
@@ -450,33 +637,33 @@ export function WaitingRoom({
   const scheduleMax = formatInputValue(new Date(Date.now() + TWO_HOURS_MS));
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <Card>
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs sm:text-sm uppercase tracking-wide text-loop-slate/60">
+            <p className="text-sm uppercase tracking-wide text-loop-slate/60">
               {t("roomLabel")}
             </p>
-            <p className="text-xl sm:text-2xl font-semibold text-loop-slate break-all">{roomId}</p>
-            {venueName && (
-              <p className="text-xs sm:text-sm text-loop-slate/60">
-                {t("roomVenue", { venue: venueName })}
+            <p className="text-2xl font-semibold text-loop-slate break-all">{roomId}</p>
+            {resolvedVenueName && (
+              <p className="text-sm text-loop-slate/60">
+                {t("roomVenue", { venue: resolvedVenueName })}
               </p>
             )}
           </div>
           <div className="flex flex-col gap-2 md:w-1/2">
-            <label className="text-xs sm:text-sm font-medium text-loop-slate">
+            <label className="text-sm font-medium text-loop-slate">
               {t("shareLabel")}
             </label>
             <div className="flex gap-2">
-              <Input readOnly value={shareUrl} className="flex-1 text-xs sm:text-sm" />
+              <Input readOnly value={shareUrl} className="flex-1 text-sm" />
               <Button onClick={handleCopy} variant="ghost" className="shrink-0">
                 {copied ? t("copied") : t("copy")}
               </Button>
             </div>
-            <p className="text-xs text-loop-slate/60">{t("joinHint")}</p>
+            <p className="text-sm text-loop-slate/60">{t("joinHint")}</p>
             {meetingPointSummary && scheduleSummary && (
-              <p className="text-xs text-loop-slate/60">
+              <p className="text-sm text-loop-slate/60">
                 {t("planningSummary", {
                   meetingPoint: meetingPointSummary,
                   time: scheduleSummary,
@@ -488,7 +675,7 @@ export function WaitingRoom({
               {ownerBadgeLabel && <Badge tone={isOwner ? "success" : "neutral"}>{ownerBadgeLabel}</Badge>}
             </div>
             {ownerHint && (
-              <p className="text-xs text-loop-slate/60">
+              <p className="text-sm text-loop-slate/60">
                 {ownerHint}
               </p>
             )}
@@ -497,9 +684,9 @@ export function WaitingRoom({
       </Card>
 
       <Card className="space-y-4">
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+            <label className="text-sm font-semibold text-loop-slate">
               {t("nameLabel")}
             </label>
             <Input
@@ -510,29 +697,35 @@ export function WaitingRoom({
             />
           </div>
           <div>
-            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+            <label className="text-sm font-semibold text-loop-slate">
               {t("capacityLabel")}
             </label>
             <select
-              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
-              value={capacity}
-              onChange={(event) => handleCapacityChange(Number(event.target.value))}
+              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm min-h-[44px]"
+              value={capacitySelection}
+              onChange={(event) => handleCapacityChange(event.target.value)}
               disabled={updatingCapacity || !isOwner}
             >
+              <option value="">{t("capacityPlaceholder")}</option>
               {[2, 3, 4].map((value) => (
                 <option key={value} value={value}>
                   {t("capacityOption", { value })}
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-sm text-loop-slate/60">
+              {capacityConfirmed
+                ? t("capacityConfirmedHint", { value: capacity })
+                : t("capacityRequiredHint")}
+            </p>
           </div>
           <div>
-            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+            <label className="text-sm font-semibold text-loop-slate">
               {t("meetPointLabel")}
             </label>
             {meetPoints.length > 0 ? (
               <select
-                className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
+                className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm min-h-[44px]"
                 value={selectedMeetPointId}
                 onChange={(event) => handleMeetingPointChange(event.target.value)}
                 disabled={!isOwner}
@@ -555,49 +748,49 @@ export function WaitingRoom({
                   )}
               </select>
             ) : (
-              <p className="mt-2 rounded-2xl border border-dashed border-loop-slate/30 px-3 py-2 text-xs text-loop-slate/70">
+              <p className="mt-2 rounded-2xl border border-dashed border-loop-slate/30 px-3 py-2 text-sm text-loop-slate/70">
                 {t("meetPointMissing")}
               </p>
             )}
-            <p className="mt-1 text-xs text-loop-slate/60">{t("meetPointHint")}</p>
+            <p className="mt-1 text-sm text-loop-slate/60">{t("meetPointHint")}</p>
+            {selectedMeetingPoint?.instructions && (
+              <p className="text-sm text-loop-slate/60">{selectedMeetingPoint.instructions}</p>
+            )}
           </div>
           <div>
-            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+            <label className="text-sm font-semibold text-loop-slate">
               {t("scheduleLabel")}
             </label>
             <input
               type="datetime-local"
-              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
+              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm min-h-[44px]"
               value={scheduleInput}
               min={scheduleMin}
               max={scheduleMax}
               onChange={(event) => handleScheduleChange(event.target.value)}
               disabled={!isOwner}
             />
-            <p className="mt-1 text-xs text-loop-slate/60">{t("scheduleHint")}</p>
+            <p className="mt-1 text-sm text-loop-slate/60">{t("scheduleHint")}</p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 sm:gap-3">
-          <Button onClick={handleJoin}>{t("joinButton")}</Button>
-          <Button variant="ghost" onClick={handleLeave}>
-            {t("leaveButton")}
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={handleJoin} disabled={joinDisabled}>
+            {t("joinButton")}
           </Button>
           <Button variant="secondary" onClick={handleStartLoop} disabled={!canStartLoop}>
             {t("startLoopButton")}
           </Button>
-          {matchedLoop && isOwner && (
-            <Button variant="danger" onClick={() => handleEndLoop(matchedLoop.id)}>
-              {t("endLoopButton")}
-            </Button>
-          )}
           <Button variant="ghost" onClick={handleReset} disabled={!isOwner}>
             {t("resetButton")}
           </Button>
         </div>
-        {!canStartLoop && isOwner && (
-          <p className="text-xs text-loop-slate/60">{t("startLoopDisabled")}</p>
+        {setupNotice && (
+          <p className="text-sm text-loop-rose/70">{setupNotice}</p>
         )}
-        <p className="text-xs text-loop-slate/60">{t("autoLockHint")}</p>
+        {!canStartLoop && isOwner && (
+          <p className="text-sm text-loop-slate/60">{t("startLoopDisabled")}</p>
+        )}
+        <p className="text-sm text-loop-slate/60">{t("autoLockHint")}</p>
         {info && (
           <p className="rounded-2xl bg-loop-green/10 px-4 py-2 text-sm text-loop-green">
             {info}
@@ -616,82 +809,236 @@ export function WaitingRoom({
               : t("statusIdle")}
         </p>
         {matchedLoop && (
-          <div className="rounded-2xl border border-loop-green/30 bg-loop-green/5 px-4 py-3 text-sm text-loop-slate">
-            <p className="font-semibold">
-              {t("matchedHeadline", { loopId: matchedLoop.id })}
-            </p>
-            <p className="mt-1 text-loop-slate/70">{t("matchedDescription")}</p>
-            {matchedLoop.meetingPoint?.label && (
-              <p className="mt-2 text-loop-slate">
-                {t("loopMeetingPoint")}: {matchedLoop.meetingPoint.label}
-                {matchedLoop.meetingPoint.description
-                  ? ` · ${matchedLoop.meetingPoint.description}`
-                  : ""}
+          <div className="rounded-2xl border border-loop-green/30 bg-loop-green/5 px-4 py-4 text-sm text-loop-slate">
+            <div className="space-y-3">
+              <div>
+                <p className="font-semibold">
+                  {t("matchedHeadline", { loopId: matchedLoop.id })}
+                </p>
+                <p className="mt-1 text-loop-slate/70">{t("matchedDescription")}</p>
+              </div>
+              {matchedLoop.meetingPoint?.label && (
+                <p className="text-loop-slate">
+                  {t("loopMeetingPoint")}: {matchedLoop.meetingPoint.label}
+                  {matchedLoop.meetingPoint.description
+                    ? ` · ${matchedLoop.meetingPoint.description}`
+                    : ""}
+                </p>
+              )}
+              {matchedLoop.scheduledAt && (
+                <p className="text-loop-slate/70">
+                  {t("loopScheduledAt", {
+                    time: formatDateDisplay(matchedLoop.scheduledAt),
+                  })}
+                </p>
+              )}
+              <p className="mt-2 text-sm uppercase tracking-wide text-loop-slate/60">
+                {t("matchedParticipantsHeadline")}
               </p>
-            )}
-            {matchedLoop.scheduledAt && (
-              <p className="text-loop-slate/70">
-                {t("loopScheduledAt", {
-                  time: formatDateDisplay(matchedLoop.scheduledAt),
-                })}
-              </p>
-            )}
-            <p className="mt-3 text-xs uppercase tracking-wide text-loop-slate/60">
-              {t("matchedParticipantsHeadline")}
-            </p>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {matchedLoop.participants.map((participant) => (
-                <Badge
-                  key={participant.userId}
-                  tone={participant.userId === userId ? "success" : "neutral"}
-                >
-                  {participant.userId === userId
-                    ? t("matchedParticipantsYou", { name: participant.alias })
-                    : participant.alias}
-                </Badge>
-              ))}
+              <div className="flex flex-wrap gap-2">
+                {matchedLoop.participants.map((participant) => (
+                  <Badge
+                    key={participant.userId}
+                    tone={participant.userId === userId ? "success" : "neutral"}
+                  >
+                    {participant.userId === userId
+                      ? t("matchedParticipantsYou", { name: participant.alias })
+                      : participant.alias}
+                  </Badge>
+                ))}
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-loop-slate/20 bg-white/80 p-3">
+                  <p className="text-sm uppercase tracking-wide text-loop-slate/60">
+                    {t("mapHeadline")}
+                  </p>
+                  {mapSrc ? (
+                    <div className="mt-2 overflow-hidden rounded-2xl border border-loop-slate/10 bg-white">
+                      <iframe
+                        src={mapSrc}
+                        title="Treffpunkt auf Google Maps"
+                        loading="lazy"
+                        className="h-48 w-full"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-loop-slate/70">
+                      {t("mapUnavailable")}
+                    </p>
+                  )}
+                  {activeMeetPointOption?.instructions && (
+                    <p className="mt-2 text-sm text-loop-slate/70">
+                      {activeMeetPointOption.instructions}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-loop-green/20 bg-white/80 p-3">
+                  <p className="text-sm uppercase tracking-wide text-loop-slate/60">
+                    {t("chatHeadline")}
+                  </p>
+                  <div className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {activeMessages.length === 0 ? (
+                      <p className="text-sm text-loop-slate/60">{t("chatEmpty")}</p>
+                    ) : (
+                      activeMessages.map((message) => (
+                        <div
+                          key={message.id}
+                          className="rounded-xl border border-loop-slate/10 bg-white/70 px-3 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-loop-slate truncate">
+                              {message.alias}
+                            </p>
+                            <p className="text-xs text-loop-slate/50">
+                              {formatTimeDisplay(message.sentAt)}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-sm text-loop-slate break-words">
+                            {message.text}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <form className="mt-3 flex flex-col gap-2" onSubmit={handleSendChatMessage}>
+                    <Input
+                      value={chatMessage}
+                      onChange={(event) => setChatMessage(event.target.value)}
+                      placeholder={t("chatPlaceholder")}
+                      disabled={sendingChat}
+                    />
+                    <Button type="submit" size="sm" disabled={!canSendChat}>
+                      {t("chatSend")}
+                    </Button>
+                  </form>
+                  {chatNotice && (
+                    <p className="mt-1 text-sm text-loop-rose/70">{chatNotice}</p>
+                  )}
+                </div>
+              </div>
+              {isOwner && (
+                <div className="mt-4 rounded-2xl border border-loop-slate/20 bg-white/90 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-loop-slate">
+                      {t("feedbackHeadline")}
+                    </p>
+                    <Button
+                      type="button"
+                      variant={feedbackVisible ? "ghost" : "danger"}
+                      size="sm"
+                      onClick={() => {
+                        setFeedbackVisible((prev) => !prev);
+                        setFeedbackError(null);
+                      }}
+                    >
+                      {feedbackVisible ? t("feedbackCancel") : t("endLoopButton")}
+                    </Button>
+                  </div>
+                  {feedbackVisible ? (
+                    <form className="mt-3 space-y-3" onSubmit={handleSubmitFeedback}>
+                      <p className="text-sm text-loop-slate/70">
+                        {t("feedbackIntro")}
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {feedbackOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                          >
+                            <input
+                              type="radio"
+                              name="feedbackRating"
+                              className="accent-loop-green"
+                              value={option.value}
+                              checked={feedbackRating === option.value}
+                              onChange={() => setFeedbackRating(option.value)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div>
+                        <label className="text-sm font-semibold text-loop-slate">
+                          {t("feedbackNoteLabel")}
+                        </label>
+                        <Textarea
+                          value={feedbackNotes}
+                          onChange={(event) => setFeedbackNotes(event.target.value)}
+                          placeholder={t("feedbackNotePlaceholder")}
+                          rows={3}
+                          className="mt-1"
+                        />
+                      </div>
+                      {feedbackError && (
+                        <p className="text-sm text-loop-rose/70">{feedbackError}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="submit" disabled={feedbackSubmitting}>
+                          {t("feedbackSubmit")}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setFeedbackVisible(false);
+                            setFeedbackError(null);
+                          }}
+                        >
+                          {t("feedbackCancel")}
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <p className="mt-2 text-sm text-loop-slate/70">
+                      {t("feedbackPrompt")}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
         {isFetching && lastUpdatedLabel && (
-          <p className="text-xs text-loop-slate/50">
+          <p className="text-sm text-loop-slate/50">
             {t("updating", { time: lastUpdatedLabel })}
           </p>
         )}
       </Card>
 
-      <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+      <div className="grid gap-5 sm:gap-6 md:grid-cols-2">
         <Card>
-          <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className="text-lg font-semibold text-loop-slate">
               {t("participantsHeadline")}
             </h3>
             <Badge tone="neutral" className="shrink-0">
               {waiting.length} / {capacity}
             </Badge>
           </div>
-          <div className="space-y-2 sm:space-y-3">
+          <div className="space-y-3">
             {waiting.length === 0 && (
-              <p className="rounded-xl sm:rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
+              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-4 py-3 text-sm text-loop-slate/70">
                 {t("emptyWaiting")}
               </p>
             )}
             {waiting.map((participant) => (
               <div
                 key={participant.userId}
-                className="flex items-center justify-between gap-2 rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2"
+                className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3.5 sm:px-4 py-2.5"
               >
                 <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
+                  <p className="text-sm font-semibold text-loop-slate truncate">
                     {participant.alias}
                   </p>
-                  <p className="text-xs text-loop-slate/50 truncate">
+                  <p className="text-sm text-loop-slate/50 truncate">
                     {t("joinedAt", {
                       time: formatTimeDisplay(participant.joinedAt),
                     })}
                   </p>
                 </div>
-                <Badge tone="success" className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
+                <Badge tone="success" className="shrink-0 text-xs px-2 py-0.5">
                   {t("statusChipWaiting")}
                 </Badge>
               </div>
@@ -700,15 +1047,15 @@ export function WaitingRoom({
         </Card>
 
         <Card>
-          <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h3 className="text-lg font-semibold text-loop-slate">
               {t("loopsHeadline")}
             </h3>
             <Badge tone="success" className="shrink-0">{loops.length}</Badge>
           </div>
-          <div className="space-y-2 sm:space-y-3">
+          <div className="space-y-3">
             {loops.length === 0 && (
-              <p className="rounded-xl sm:rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
+              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-4 py-3 text-sm text-loop-slate/70">
                 {t("emptyLoops")}
               </p>
             )}
@@ -728,18 +1075,18 @@ export function WaitingRoom({
               return (
                 <div
                   key={loop.id}
-                  className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2 sm:py-3"
+                  className="rounded-2xl border border-white/60 bg-white/80 px-3.5 sm:px-4 py-2.5 sm:py-3"
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate min-w-0">
+                    <p className="text-sm font-semibold text-loop-slate truncate min-w-0">
                       {t("loopLabel", { id: loop.id })}
                     </p>
-                    <Badge tone={loopTone} className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
+                    <Badge tone={loopTone} className="shrink-0 text-xs px-2 py-0.5">
                       {loopLabel}
                     </Badge>
                   </div>
                   {loop.meetingPoint?.label && (
-                    <p className="mt-1 text-xs sm:text-sm text-loop-slate/80 break-words">
+                    <p className="mt-1 text-sm text-loop-slate/80 break-words">
                       {t("loopMeetingPoint")}: {loop.meetingPoint.label}
                       {loop.meetingPoint.description
                         ? ` · ${loop.meetingPoint.description}`
@@ -747,28 +1094,28 @@ export function WaitingRoom({
                     </p>
                   )}
                   {loop.scheduledAt && (
-                    <p className="text-xs text-loop-slate/60 break-words">
+                    <p className="text-sm text-loop-slate/60 break-words">
                       {t("loopScheduledAt", {
                         time: formatDateDisplay(loop.scheduledAt),
                       })}
                     </p>
                   )}
                   {loop.startedAt && (
-                    <p className="text-xs text-loop-slate/60 break-words">
+                    <p className="text-sm text-loop-slate/60 break-words">
                       {t("loopStartedAt", {
                         time: formatDateDisplay(loop.startedAt),
                       })}
                     </p>
                   )}
                   {loop.durationMinutes && loop.status === "completed" && (
-                    <p className="text-xs text-loop-slate/60 break-words">
+                    <p className="text-sm text-loop-slate/60 break-words">
                       {t("loopDuration", { minutes: loop.durationMinutes })}
                       {loop.autoClosed && (
                         <span className="ml-1">· {t("loopAutoClosed")}</span>
                       )}
                     </p>
                   )}
-                  <p className="mt-2 text-xs sm:text-sm text-loop-slate/70 break-words">
+                  <p className="mt-2 text-sm text-loop-slate/70 break-words">
                     {loop.participants.map((p) => p.alias).join(", ")}
                   </p>
                 </div>
