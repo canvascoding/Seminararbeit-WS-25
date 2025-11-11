@@ -19,6 +19,17 @@ interface WaitingLoop {
   participantIds: string[];
   participants: WaitingParticipant[];
   createdAt: string;
+  meetingPoint?: {
+    id?: string | null;
+    label?: string | null;
+    description?: string | null;
+  } | null;
+  scheduledAt?: string | null;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  status?: "inProgress" | "completed";
+  durationMinutes?: number;
+  autoClosed?: boolean;
 }
 
 interface WaitingRoomSnapshot {
@@ -27,6 +38,14 @@ interface WaitingRoomSnapshot {
   waiting: WaitingParticipant[];
   loops: WaitingLoop[];
   lastUpdated: string;
+  meetingPoint: WaitingLoop["meetingPoint"];
+  scheduledAt?: string | null;
+}
+
+interface MeetingPointOption {
+  id: string;
+  label: string;
+  description?: string;
 }
 
 interface WaitingRoomProps {
@@ -34,6 +53,44 @@ interface WaitingRoomProps {
   venueName?: string | null;
   venueId?: string | null;
   defaultCapacity: number;
+  meetPoints?: MeetingPointOption[];
+}
+
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+function formatInputValue(source?: string | Date | null) {
+  if (!source) return "";
+  const date = source instanceof Date ? source : new Date(source);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function formatDateDisplay(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatTimeDisplay(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function WaitingRoom({
@@ -41,6 +98,7 @@ export function WaitingRoom({
   venueName,
   venueId,
   defaultCapacity,
+  meetPoints = [],
 }: WaitingRoomProps) {
   const t = useTranslations("waitingRoom");
   const [displayName, setDisplayName] = useState("");
@@ -51,6 +109,10 @@ export function WaitingRoom({
   const [capacity, setCapacity] = useState(defaultCapacity);
   const [updatingCapacity, setUpdatingCapacity] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selectedMeetPointId, setSelectedMeetPointId] = useState<string>("");
+  const [scheduleInput, setScheduleInput] = useState(() =>
+    formatInputValue(new Date()),
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -87,6 +149,18 @@ export function WaitingRoom({
     }
   }, [data?.capacity, capacity, updatingCapacity]);
 
+  useEffect(() => {
+    if (data?.meetingPoint?.id) {
+      setSelectedMeetPointId(data.meetingPoint.id);
+    }
+  }, [data?.meetingPoint?.id]);
+
+  useEffect(() => {
+    if (data?.scheduledAt) {
+      setScheduleInput(formatInputValue(data.scheduledAt));
+    }
+  }, [data?.scheduledAt]);
+
   async function mutateRoom(body: Record<string, unknown>) {
     setError(null);
     const response = await fetch("/api/test/waiting-room", {
@@ -98,8 +172,17 @@ export function WaitingRoom({
       }),
     });
     if (!response.ok) {
-      setError(t("error"));
-      return;
+      let message = t("error");
+      try {
+        const payload = await response.json();
+        if (payload?.message) {
+          message = String(payload.message);
+        }
+      } catch {
+        // ignore json errors
+      }
+      setError(message);
+      throw new Error(message);
     }
     await refetch();
   }
@@ -110,38 +193,119 @@ export function WaitingRoom({
       return;
     }
     setInfo(null);
-    await mutateRoom({
-      action: "join",
-      userId,
-      displayName: displayName.trim(),
-    });
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("loopTestUserName", displayName.trim());
+    try {
+      await mutateRoom({
+        action: "join",
+        userId,
+        displayName: displayName.trim(),
+      });
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("loopTestUserName", displayName.trim());
+      }
+      setInfo(t("joinQueued"));
+    } catch {
+      // handled in mutateRoom
     }
-    setInfo(t("joinQueued"));
   }
 
   async function handleLeave() {
     if (!userId) return;
-    await mutateRoom({ action: "leave", userId });
-    setInfo(t("leftRoom"));
-  }
-
-  async function handleSpawn(count: number) {
-    await mutateRoom({ action: "spawnBot", count });
-    setInfo(t("botAdded", { count }));
+    setInfo(null);
+    try {
+      await mutateRoom({ action: "leave", userId });
+      setInfo(t("leftRoom"));
+    } catch {
+      // handled in mutateRoom
+    }
   }
 
   async function handleReset() {
-    await mutateRoom({ action: "reset" });
-    setInfo(t("roomCleared"));
+    setInfo(null);
+    try {
+      await mutateRoom({ action: "reset" });
+      setInfo(t("roomCleared"));
+    } catch {
+      // handled in mutateRoom
+    }
   }
 
   async function handleCapacityChange(value: number) {
     setCapacity(value);
     setUpdatingCapacity(true);
-    await mutateRoom({ action: "configure", capacity: value });
-    setUpdatingCapacity(false);
+    try {
+      await mutateRoom({ action: "configure", capacity: value });
+    } catch {
+      // handled
+    } finally {
+      setUpdatingCapacity(false);
+    }
+  }
+
+  async function handleMeetingPointChange(meetPointId: string) {
+    setSelectedMeetPointId(meetPointId);
+    if (!meetPointId) {
+      return;
+    }
+    const meetingPoint = meetPoints.find((point) => point.id === meetPointId);
+    if (!meetingPoint) {
+      setError(t("meetPointMissing"));
+      return;
+    }
+    setInfo(null);
+    try {
+      await mutateRoom({
+        action: "configure",
+        meetPointId: meetingPoint.id,
+        meetPointLabel: meetingPoint.label,
+        meetPointDescription: meetingPoint.description ?? "",
+      });
+      setInfo(
+        t("meetingPointUpdated", {
+          label: `${meetingPoint.label}${meetingPoint.description ? ` · ${meetingPoint.description}` : ""}`,
+        }),
+      );
+    } catch {
+      // handled
+    }
+  }
+
+  async function handleScheduleChange(value: string) {
+    setScheduleInput(value);
+    if (!value) {
+      return;
+    }
+    const isoValue = new Date(value).toISOString();
+    setInfo(null);
+    try {
+      await mutateRoom({ action: "configure", scheduledAt: isoValue });
+      setInfo(
+        t("scheduleUpdated", {
+          time: formatDateDisplay(isoValue),
+        }),
+      );
+    } catch {
+      // handled
+    }
+  }
+
+  async function handleStartLoop() {
+    setInfo(null);
+    try {
+      await mutateRoom({ action: "startLoop", userId });
+      setInfo(t("loopStarted"));
+    } catch {
+      // handled
+    }
+  }
+
+  async function handleEndLoop(loopId: string) {
+    setInfo(null);
+    try {
+      await mutateRoom({ action: "endLoop", loopId });
+      setInfo(t("loopEnded"));
+    } catch {
+      // handled
+    }
   }
 
   async function handleCopy() {
@@ -160,7 +324,10 @@ export function WaitingRoom({
   const matchedLoop = useMemo(() => {
     if (!userId || !data) return null;
     return (
-      data.loops.find((loop) => loop.participantIds.includes(userId)) ?? null
+      data.loops.find(
+        (loop) =>
+          loop.participantIds.includes(userId) && loop.status !== "completed",
+      ) ?? null
     );
   }, [data, userId]);
 
@@ -177,6 +344,17 @@ export function WaitingRoom({
       second: "2-digit",
     });
   }, [data?.lastUpdated]);
+
+  const canStartLoop =
+    waiting.length >= 2 && !!data?.meetingPoint?.label && !!data?.scheduledAt;
+  const meetingPointSummary = data?.meetingPoint?.label
+    ? `${data.meetingPoint.label}${data.meetingPoint.description ? ` · ${data.meetingPoint.description}` : ""}`
+    : null;
+  const scheduleSummary = data?.scheduledAt
+    ? formatDateDisplay(data.scheduledAt)
+    : null;
+  const scheduleMin = formatInputValue(new Date());
+  const scheduleMax = formatInputValue(new Date(Date.now() + TWO_HOURS_MS));
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -204,12 +382,20 @@ export function WaitingRoom({
               </Button>
             </div>
             <p className="text-xs text-loop-slate/60">{t("joinHint")}</p>
+            {meetingPointSummary && scheduleSummary && (
+              <p className="text-xs text-loop-slate/60">
+                {t("planningSummary", {
+                  meetingPoint: meetingPointSummary,
+                  time: scheduleSummary,
+                })}
+              </p>
+            )}
           </div>
         </div>
       </Card>
 
       <Card className="space-y-4">
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 md:grid-cols-[2fr,1fr]">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className="text-xs sm:text-sm font-semibold text-loop-slate">
               {t("nameLabel")}
@@ -229,6 +415,7 @@ export function WaitingRoom({
               className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
               value={capacity}
               onChange={(event) => handleCapacityChange(Number(event.target.value))}
+              disabled={updatingCapacity}
             >
               {[2, 3, 4].map((value) => (
                 <option key={value} value={value}>
@@ -237,22 +424,76 @@ export function WaitingRoom({
               ))}
             </select>
           </div>
+          <div>
+            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+              {t("meetPointLabel")}
+            </label>
+            {meetPoints.length > 0 ? (
+              <select
+                className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
+                value={selectedMeetPointId}
+                onChange={(event) => handleMeetingPointChange(event.target.value)}
+              >
+                <option value="">
+                  {t("meetPointPlaceholder")}
+                </option>
+                {meetPoints.map((point) => (
+                  <option key={point.id} value={point.id}>
+                    {point.description
+                      ? `${point.label} · ${point.description}`
+                      : point.label}
+                  </option>
+                ))}
+                {selectedMeetPointId &&
+                  !meetPoints.some((point) => point.id === selectedMeetPointId) && (
+                    <option value={selectedMeetPointId}>
+                      {meetingPointSummary ?? selectedMeetPointId}
+                    </option>
+                  )}
+              </select>
+            ) : (
+              <p className="mt-2 rounded-2xl border border-dashed border-loop-slate/30 px-3 py-2 text-xs text-loop-slate/70">
+                {t("meetPointMissing")}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-loop-slate/60">{t("meetPointHint")}</p>
+          </div>
+          <div>
+            <label className="text-xs sm:text-sm font-semibold text-loop-slate">
+              {t("scheduleLabel")}
+            </label>
+            <input
+              type="datetime-local"
+              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
+              value={scheduleInput}
+              min={scheduleMin}
+              max={scheduleMax}
+              onChange={(event) => handleScheduleChange(event.target.value)}
+            />
+            <p className="mt-1 text-xs text-loop-slate/60">{t("scheduleHint")}</p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button onClick={handleJoin}>{t("joinButton")}</Button>
           <Button variant="ghost" onClick={handleLeave}>
             {t("leaveButton")}
           </Button>
-          <Button variant="secondary" onClick={() => handleSpawn(1)} className="text-xs sm:text-sm">
-            {t("spawnBot")}
+          <Button variant="secondary" onClick={handleStartLoop} disabled={!canStartLoop}>
+            {t("startLoopButton")}
           </Button>
-          <Button variant="secondary" onClick={() => handleSpawn(2)} className="text-xs sm:text-sm">
-            {t("spawnBotMany")}
-          </Button>
+          {matchedLoop && (
+            <Button variant="danger" onClick={() => handleEndLoop(matchedLoop.id)}>
+              {t("endLoopButton")}
+            </Button>
+          )}
           <Button variant="ghost" onClick={handleReset}>
             {t("resetButton")}
           </Button>
         </div>
+        {!canStartLoop && (
+          <p className="text-xs text-loop-slate/60">{t("startLoopDisabled")}</p>
+        )}
+        <p className="text-xs text-loop-slate/60">{t("autoLockHint")}</p>
         {info && (
           <p className="rounded-2xl bg-loop-green/10 px-4 py-2 text-sm text-loop-green">
             {info}
@@ -275,9 +516,22 @@ export function WaitingRoom({
             <p className="font-semibold">
               {t("matchedHeadline", { loopId: matchedLoop.id })}
             </p>
-            <p className="mt-1 text-loop-slate/70">
-              {t("matchedDescription")}
-            </p>
+            <p className="mt-1 text-loop-slate/70">{t("matchedDescription")}</p>
+            {matchedLoop.meetingPoint?.label && (
+              <p className="mt-2 text-loop-slate">
+                {t("loopMeetingPoint")}: {matchedLoop.meetingPoint.label}
+                {matchedLoop.meetingPoint.description
+                  ? ` · ${matchedLoop.meetingPoint.description}`
+                  : ""}
+              </p>
+            )}
+            {matchedLoop.scheduledAt && (
+              <p className="text-loop-slate/70">
+                {t("loopScheduledAt", {
+                  time: formatDateDisplay(matchedLoop.scheduledAt),
+                })}
+              </p>
+            )}
             <p className="mt-3 text-xs uppercase tracking-wide text-loop-slate/60">
               {t("matchedParticipantsHeadline")}
             </p>
@@ -312,7 +566,6 @@ export function WaitingRoom({
               {waiting.length} / {capacity}
             </Badge>
           </div>
-          <p className="mt-1 text-xs sm:text-sm text-loop-slate/60">{t("demoNote")}</p>
           <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3">
             {waiting.length === 0 && (
               <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
@@ -330,10 +583,7 @@ export function WaitingRoom({
                   </p>
                   <p className="text-xs text-loop-slate/50">
                     {t("joinedAt", {
-                      time: new Date(participant.joinedAt).toLocaleTimeString("de-DE", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
+                      time: formatTimeDisplay(participant.joinedAt),
                     })}
                   </p>
                 </div>
@@ -365,13 +615,42 @@ export function WaitingRoom({
                   <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
                     {t("loopLabel", { id: loop.id })}
                   </p>
-                  <Badge tone="neutral" className="shrink-0 text-xs">
-                    {new Date(loop.createdAt).toLocaleTimeString("de-DE", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <Badge tone={loop.status === "inProgress" ? "success" : "neutral"} className="shrink-0 text-xs">
+                    {loop.status === "inProgress"
+                      ? t("loopStatusActive")
+                      : t("loopStatusCompleted")}
                   </Badge>
                 </div>
+                {loop.meetingPoint?.label && (
+                  <p className="mt-1 text-xs sm:text-sm text-loop-slate/80">
+                    {t("loopMeetingPoint")}: {loop.meetingPoint.label}
+                    {loop.meetingPoint.description
+                      ? ` · ${loop.meetingPoint.description}`
+                      : ""}
+                  </p>
+                )}
+                {loop.scheduledAt && (
+                  <p className="text-xs text-loop-slate/60">
+                    {t("loopScheduledAt", {
+                      time: formatDateDisplay(loop.scheduledAt),
+                    })}
+                  </p>
+                )}
+                {loop.startedAt && (
+                  <p className="text-xs text-loop-slate/60">
+                    {t("loopStartedAt", {
+                      time: formatDateDisplay(loop.startedAt),
+                    })}
+                  </p>
+                )}
+                {loop.durationMinutes && loop.status === "completed" && (
+                  <p className="text-xs text-loop-slate/60">
+                    {t("loopDuration", { minutes: loop.durationMinutes })}
+                    {loop.autoClosed && (
+                      <span className="ml-1">· {t("loopAutoClosed")}</span>
+                    )}
+                  </p>
+                )}
                 <p className="mt-2 text-xs sm:text-sm text-loop-slate/70 break-words">
                   {loop.participants.map((p) => p.alias).join(", ")}
                 </p>

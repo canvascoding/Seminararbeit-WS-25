@@ -41,6 +41,7 @@ export default async function WaitingRoomPage({ searchParams }: Props) {
               roomId={roomId}
               venueName={venue?.name}
               venueId={venue?.id}
+              meetPoints={venue?.meetPoints ?? []}
               defaultCapacity={defaultCapacity}
             />
           </div>

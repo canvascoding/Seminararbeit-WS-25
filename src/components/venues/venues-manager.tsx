@@ -380,62 +380,111 @@ export function VenuesManager({ venues }: Props) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-loop-slate">
+    <div className="grid gap-6 lg:grid-cols-[320px,1fr] xl:grid-cols-[360px,1fr]">
+      <div className="flex flex-col rounded-[32px] border border-loop-slate/10 bg-white/90 p-4 shadow-loop-card sm:p-5">
+        <div className="flex items-center gap-2 rounded-full bg-loop-sand/80 p-1">
+          <span className="flex-1 rounded-full bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-loop-slate shadow-sm">
             {venuesT("listTitle")}
-          </p>
-          <Button
-            variant="secondary"
+          </span>
+          <button
+            type="button"
             onClick={handleCreateNew}
-            className="px-3 py-1.5 text-xs"
+            className="inline-flex items-center rounded-full border border-loop-green/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-loop-green transition hover:border-loop-green hover:bg-loop-green/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-loop-green/40"
           >
             {venuesT("createNew")}
-          </Button>
+          </button>
         </div>
-        <Input
-          className="mt-3 text-sm"
-          placeholder={venuesT("searchPlaceholder")}
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-        />
-        <div className="mt-4 space-y-2">
-          {filteredItems.length === 0 && (
-            <p className="text-sm text-loop-slate/60">{venuesT("emptyState")}</p>
+        <label className="sr-only" htmlFor="venue-search">
+          {venuesT("searchPlaceholder")}
+        </label>
+        <div className="mt-4">
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-loop-slate/40">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4.35-4.35" />
+              </svg>
+            </span>
+            <Input
+              id="venue-search"
+              className="pl-9 text-sm"
+              placeholder={venuesT("searchPlaceholder")}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex-1 space-y-2 overflow-y-auto pr-1 lg:max-h-[70vh]">
+          {filteredItems.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 py-8 text-center text-sm text-loop-slate/60">
+              {venuesT("emptyState")}
+            </p>
+          ) : (
+            filteredItems.map((venue) => {
+              const meta = [venue.city, venue.partnerId]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <button
+                  key={venue.id}
+                  type="button"
+                  aria-current={selectedId === venue.id ? "true" : undefined}
+                  onClick={() => setSelectedId(venue.id)}
+                  className={cn(
+                    "w-full rounded-2xl border px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-loop-green/40",
+                    selectedId === venue.id
+                      ? "border-loop-green/60 bg-loop-green/10 shadow-inner"
+                      : "border-loop-slate/15 hover:border-loop-green/30 hover:bg-loop-green/5",
+                  )}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-loop-slate">{venue.name}</p>
+                      {meta && (
+                        <p className="mt-1 text-xs text-loop-slate/60">{meta}</p>
+                      )}
+                    </div>
+                    {venue.status && (
+                      <Badge
+                        tone={
+                          venue.status === "active"
+                            ? "success"
+                            : venue.status === "paused"
+                              ? "warning"
+                              : "neutral"
+                        }
+                        className="flex-shrink-0 px-2 py-0.5 text-[10px]"
+                      >
+                        {venue.status === "active"
+                          ? venuesT("statusActive")
+                          : venue.status === "paused"
+                            ? venuesT("statusPaused")
+                            : venuesT("statusDraft")}
+                      </Badge>
+                    )}
+                  </div>
+                  {venue.address && (
+                    <p className="mt-1 text-xs text-loop-slate/50">
+                      {venue.address}
+                    </p>
+                  )}
+                </button>
+              );
+            })
           )}
-          {filteredItems.map((venue) => (
-            <button
-              key={venue.id}
-              onClick={() => setSelectedId(venue.id)}
-              className={cn(
-                "w-full rounded-2xl border px-3 py-2 text-left text-sm transition-colors",
-                selectedId === venue.id
-                  ? "border-loop-green bg-loop-green/10 text-loop-green"
-                  : "border-loop-slate/15 hover:border-loop-green/40 hover:text-loop-green",
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{venue.name}</span>
-                {venue.status && (
-                  <Badge tone={venue.status === "active" ? "success" : "neutral"}>
-                    {venue.status === "active"
-                      ? venuesT("statusActive")
-                      : venue.status === "paused"
-                        ? venuesT("statusPaused")
-                        : venuesT("statusDraft")}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-loop-slate/70">
-                {venue.city ?? ""} · {venue.partnerId}
-              </p>
-            </button>
-          ))}
         </div>
-      </Card>
+      </div>
 
-      <Card className="p-4 sm:p-6 space-y-6">
+      <Card className="space-y-6 border-loop-slate/10 bg-white/95 p-4 sm:p-6">
         <div>
           <p className="text-sm font-semibold text-loop-slate">
             {form.id ? venuesT("formHeadlineExisting") : venuesT("formHeadlineNew")}

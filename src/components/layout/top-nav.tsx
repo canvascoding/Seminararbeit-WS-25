@@ -82,16 +82,16 @@ export function TopNav() {
 
   const shouldShowCheckInLink = !profile || !isCheckedIn;
   const links: NavLink[] = [
-    ...(shouldShowCheckInLink ? [{ id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" }] : []),
+    ...(shouldShowCheckInLink ? [{ id: "checkin", href: "/checkin" as Route, activePath: "/checkin", labelKey: "navCheckIn" as NavKey }] : []),
     {
       id: "slots",
       href: slotPath,
       activePath: slotPath,
-      labelKey: "navSlots",
+      labelKey: "navSlots" as NavKey,
     },
-    { id: "venues", href: "/venues", activePath: "/venues", labelKey: "navVenues" },
-    { id: "partner", href: "/partner", activePath: "/partner", labelKey: "navPartner" },
-    { id: "report", href: "/report", activePath: "/report", labelKey: "navReport" },
+    { id: "venues", href: "/venues" as Route, activePath: "/venues", labelKey: "navVenues" as NavKey },
+    { id: "partner", href: "/partner" as Route, activePath: "/partner", labelKey: "navPartner" as NavKey },
+    { id: "report", href: "/report" as Route, activePath: "/report", labelKey: "navReport" as NavKey },
   ];
 
   return (

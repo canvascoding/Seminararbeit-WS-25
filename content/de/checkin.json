@@ -17,7 +17,7 @@
   "magicLinkEmailMissing": "Wir konnten deine E-Mail nicht erkennen. Bitte gib sie erneut ein.",
   "magicLinkConfirmError": "Link ungültig oder abgelaufen. Bitte fordere einen neuen Magic-Link an.",
   "magicLinkPromptEmail": "Bitte bestätige deine E-Mail-Adresse für den Magic-Link.",
-  "waitingRoomRedirect": "Ort {venueId} erkannt. Weiterleitung in den Warteraum …",
+  "waitingRoomRedirect": "Ort {venueId} erkannt. Weiterleitung zu \"Loop starten\" …",
   "manualSuccess": "Manueller Check-in für {venueId} vorbereitet.",
   "checkoutButton": "Check-out",
   "checkoutButtonWithVenue": "{venue} verlassen",

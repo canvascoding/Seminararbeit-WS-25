@@ -22,6 +22,8 @@ export type PartnerSlotPayload = Omit<Slot, "id" | "status"> &
 export type VenueInput = Omit<Venue, "id" | "createdAt" | "updatedAt"> & {
   id?: string;
 };
+type SlotJoinUser = Pick<UserProfile, "uid"> &
+  Partial<Omit<UserProfile, "uid">>;
 
 function serializeDate(value: FirestoreDate) {
   if (!value) return new Date().toISOString();
@@ -41,8 +43,8 @@ export async function listVenues(): Promise<Venue[]> {
   return snapshot.docs.map(
     (doc) =>
       ({
-        id: doc.id,
         ...doc.data(),
+        id: doc.id,
       }) as Venue,
   );
 }
@@ -105,7 +107,7 @@ export async function listSlots(venueId?: string, fromDate?: Date): Promise<Slot
   return slots;
 }
 
-export async function joinSlot(slotId: string, user: UserProfile) {
+export async function joinSlot(slotId: string, user: SlotJoinUser) {
   if (useMock) {
     return {
       status: "pending",
@@ -253,8 +255,8 @@ export async function createVenue(payload: VenueInput): Promise<Venue> {
       id: payload.id ?? `venue-${Date.now()}`,
       defaultIntents: [],
       status: "draft",
-      meetPoints: payload.meetPoints ?? [],
       ...payload,
+      meetPoints: payload.meetPoints ?? [],
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -275,16 +277,16 @@ export async function createVenue(payload: VenueInput): Promise<Venue> {
   if (payload.id) {
     await db.collection("venues").doc(payload.id).set(data);
     return {
-      id: payload.id,
       ...(data as Omit<Venue, "id">),
+      id: payload.id,
     };
   }
 
   const ref = await db.collection("venues").add(data);
   const doc = await ref.get();
   return {
-    id: ref.id,
     ...(doc.data() as Venue),
+    id: ref.id,
   };
 }
 
@@ -315,7 +317,7 @@ export async function updateVenue(
   await db.collection("venues").doc(id).set(data, { merge: true });
   const doc = await db.collection("venues").doc(id).get();
   return {
-    id,
     ...(doc.data() as Venue),
+    id,
   };
 }
