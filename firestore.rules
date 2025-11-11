@@ -7,13 +7,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
     function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+      return isEmailVerified() && request.auth.uid == uid;
     }
 
     function isPartner() {
       // Nutze safe access für custom claims
-      return isSignedIn() && request.auth.token != null && request.auth.token.role == "partner";
+      return isEmailVerified() && request.auth.token != null && request.auth.token.role == "partner";
     }
 
     //
@@ -21,11 +25,25 @@ service cloud.firestore {
     //
     match /users/{uid} {
       allow read, update: if isOwner(uid);
-      // WICHTIG: Bei Registrierung ist email_verified noch false!
-      // Erlaube create wenn der User authentifiziert ist und die eigene UID verwendet
-      allow create: if isOwner(uid) &&
-        request.resource.data.keys().hasAll(["displayName", "email", "university", "updatedAt"]) &&
-        request.resource.data.email == request.auth.token.email;
+      // Bei Registrierung: Erlaube create nur wenn User authentifiziert ist (email_verified kann noch false sein)
+      // Bei allen anderen Operationen: Email muss verifiziert sein (via isOwner)
+      allow create: if isSignedIn() && request.auth.uid == uid &&
+        // Alle erforderlichen Felder müssen vorhanden sein
+        request.resource.data.keys().hasAll([
+          "firstName",
+          "lastName",
+          "displayName",
+          "email",
+          "university",
+          "studyField",
+          "updatedAt"
+        ]) &&
+        // Email muss mit Firebase Auth Email übereinstimmen
+        request.resource.data.email == request.auth.token.email &&
+        // Email muss @uni-wuppertal.de Domain haben
+        request.resource.data.email.matches('.*@uni-wuppertal\\.de$') &&
+        // University muss "Bergische Universität Wuppertal" sein
+        request.resource.data.university == "Bergische Universität Wuppertal";
     }
 
     //

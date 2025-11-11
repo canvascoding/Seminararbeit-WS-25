@@ -19,6 +19,7 @@ import {
   getFirebaseDb,
   firebaseClientReady,
 } from "@/lib/firebase/client";
+import { UNIVERSITY_NAME } from "@/lib/constants";
 
 interface AuthContextValue {
   firebaseUser: User | null;
@@ -64,22 +65,38 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      // Don't load profile if email is not verified
+      if (!firebaseUser.emailVerified) {
+        setState({
+          firebaseUser,
+          profile: null,
+          loading: false,
+          mockMode: false,
+        });
+        return;
+      }
+
       const profileRef = doc(db, "users", firebaseUser.uid);
       const snapshot = await getDoc(profileRef);
       let profile: UserProfile;
 
       if (!snapshot.exists()) {
-        // Warte kurz, falls das Profil gerade von signUp() erstellt wird
+        // Wait briefly in case the profile is being created by signUp()
         await new Promise((resolve) => setTimeout(resolve, 500));
         const retrySnapshot = await getDoc(profileRef);
 
         if (!retrySnapshot.exists()) {
-          // Profil existiert immer noch nicht - erstelle Fallback
+          // Profile still doesn't exist - create fallback
+          const displayName = firebaseUser.displayName ?? "";
+          const nameParts = displayName.split(" ");
           profile = {
             uid: firebaseUser.uid,
-            displayName: firebaseUser.displayName ?? "",
+            firstName: nameParts[0] ?? "",
+            lastName: nameParts.slice(1).join(" ") || "",
+            displayName: displayName,
             email: firebaseUser.email ?? "",
-            university: "",
+            university: UNIVERSITY_NAME,
+            studyField: "",
           };
           await setDoc(profileRef, {
             ...profile,

@@ -51,11 +51,14 @@ export interface IncidentReport {
 
 export interface UserProfile {
   uid: string;
+  firstName: string;
+  lastName: string;
   displayName: string;
   email: string;
   university: string;
-  studyField?: string;
+  studyField: string;
   mutedUntil?: string;
   role?: "partner" | "admin";
+  createdAt?: string;
   updatedAt?: string;
 }

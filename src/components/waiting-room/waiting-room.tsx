@@ -42,7 +42,7 @@ export function WaitingRoom({
   venueId,
   defaultCapacity,
 }: WaitingRoomProps) {
-  const t = useTranslations("waitingRoom");
+  const t = useTranslations("waiting-room");
   const [displayName, setDisplayName] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
