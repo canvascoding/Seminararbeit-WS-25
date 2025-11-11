@@ -1,8 +1,11 @@
+import { randomUUID } from "crypto";
+import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
 import { WaitingRoom } from "@/components/waiting-room/waiting-room";
 import { getVenueById } from "@/lib/repositories/loop-repository";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 interface Props {
   searchParams?: Promise<{
@@ -15,7 +18,14 @@ interface Props {
 export default async function WaitingRoomPage({ searchParams }: Props) {
   const params = (await searchParams) ?? {};
   const venue = params.venue ? await getVenueById(params.venue) : null;
-  const roomId = params.room ?? params.venue ?? "demo-room";
+  if (!params.room) {
+    const query = new URLSearchParams();
+    if (params.venue) query.set("venue", params.venue);
+    if (params.capacity) query.set("capacity", params.capacity);
+    query.set("room", randomUUID());
+    redirect(`/waiting-room?${query.toString()}`);
+  }
+  const roomId = params.room!;
   const parsedCapacity = Number(params.capacity);
   const defaultCapacity =
     Number.isFinite(parsedCapacity) && parsedCapacity >= 2
@@ -24,30 +34,32 @@ export default async function WaitingRoomPage({ searchParams }: Props) {
   const t = await getTranslations("waitingRoom");
 
   return (
-    <div className="min-h-screen bg-loop-sand">
-      <TopNav />
-      <main className="mx-auto max-w-4xl px-4 py-10">
-        <div className="rounded-[40px] border border-white/80 bg-white/90 p-8 shadow-soft">
-          <h1 className="text-3xl font-semibold text-loop-slate">
-            {t("title")}
-          </h1>
-          <p className="mt-2 text-loop-slate/70">
-            {venue
-              ? t("subtitleVenue", { venue: venue.name })
-              : t("subtitle")}
-          </p>
-          <div className="mt-8">
-            <WaitingRoom
-              roomId={roomId}
-              venueName={venue?.name}
-              venueId={venue?.id}
-              meetPoints={venue?.meetPoints ?? []}
-              defaultCapacity={defaultCapacity}
-            />
+    <AuthGuard>
+      <div className="min-h-screen bg-loop-sand">
+        <TopNav />
+        <main className="mx-auto max-w-4xl px-4 py-10">
+          <div className="rounded-[40px] border border-white/80 bg-white/90 p-8 shadow-soft">
+            <h1 className="text-3xl font-semibold text-loop-slate">
+              {t("title")}
+            </h1>
+            <p className="mt-2 text-loop-slate/70">
+              {venue
+                ? t("subtitleVenue", { venue: venue.name })
+                : t("subtitle")}
+            </p>
+            <div className="mt-8">
+              <WaitingRoom
+                roomId={roomId}
+                venueName={venue?.name}
+                venueId={venue?.id}
+                meetPoints={venue?.meetPoints ?? []}
+                defaultCapacity={defaultCapacity}
+              />
+            </div>
           </div>
-        </div>
-      </main>
-      <Footer />
-    </div>
+        </main>
+        <Footer />
+      </div>
+    </AuthGuard>
   );
 }

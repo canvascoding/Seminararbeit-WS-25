@@ -6,8 +6,22 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { AuthProvider } from "./auth-provider";
+import {
+  ConsentProvider,
+  ConsentState,
+} from "./consent-provider";
+import { CookieConsentBanner } from "@/components/layout/cookie-consent-banner";
+import { CookieSettingsTrigger } from "@/components/layout/cookie-settings-trigger";
+import { GoogleTag } from "@/components/layout/google-tag";
 
-export function AppProviders({ children }: PropsWithChildren) {
+type AppProvidersProps = PropsWithChildren<{
+  initialConsent: ConsentState;
+}>;
+
+export function AppProviders({
+  children,
+  initialConsent,
+}: AppProvidersProps) {
   const [client] = useState(
     () =>
       new QueryClient({
@@ -22,7 +36,14 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <QueryClientProvider client={client}>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        <ConsentProvider initialConsent={initialConsent}>
+          {children}
+          <CookieConsentBanner />
+          <CookieSettingsTrigger />
+          <GoogleTag />
+        </ConsentProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

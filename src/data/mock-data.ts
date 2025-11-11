@@ -127,10 +127,19 @@ export const mockLoops: Loop[] = [
   {
     id: "loop-sample-1",
     slotId: "slot-mensa-smalltalk-now",
+    roomId: "demo-room",
     venueId: "mensa-nord",
+    ownerId: "demo-uid-1",
+    ownerName: "Mara Muster",
     participants: ["demo-uid-1", "demo-uid-2"],
+    participantProfiles: [
+      { userId: "demo-uid-1", alias: "Mara", joinedAt: formatISO(addMinutes(base, 1)) },
+      { userId: "demo-uid-2", alias: "Jonas", joinedAt: formatISO(addMinutes(base, 1)) },
+    ],
     meetPoint: { label: "Tisch 7", description: "Fensterseite" },
+    scheduledAt: formatISO(addMinutes(base, 2)),
     startAt: formatISO(addMinutes(base, 2)),
+    createdAt: formatISO(base),
     status: "scheduled",
   },
 ];

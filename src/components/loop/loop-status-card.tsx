@@ -41,17 +41,24 @@ export function LoopStatusCard({ loopId, initialLoop }: Props) {
         </Badge>
       </div>
       <div className="mt-4 space-y-2 text-sm text-loop-slate/80">
-        <p>
-          Treffpunkt: {loop.meetPoint.label} · {loop.meetPoint.description}
-        </p>
-        <p>
-          Start:{" "}
-          {new Date(loop.startAt).toLocaleTimeString("de-DE", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </p>
-        <p>Teilnehmende: {loop.participants.join(", ")}</p>
+        {loop.meetPoint && (
+          <p>
+            Treffpunkt: {loop.meetPoint.label}
+            {loop.meetPoint.description ? ` · ${loop.meetPoint.description}` : ""}
+          </p>
+        )}
+        {loop.startAt && (
+          <p>
+            Start:{" "}
+            {new Date(loop.startAt).toLocaleTimeString("de-DE", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        )}
+        {loop.participants.length > 0 && (
+          <p>Teilnehmende: {loop.participants.join(", ")}</p>
+        )}
       </div>
     </div>
   );

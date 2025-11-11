@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/providers/auth-provider";
 
 interface WaitingParticipant {
   userId: string;
@@ -27,7 +28,7 @@ interface WaitingLoop {
   scheduledAt?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
-  status?: "inProgress" | "completed";
+  status?: "waitingRoom" | "active" | "inProgress" | "completed";
   durationMinutes?: number;
   autoClosed?: boolean;
 }
@@ -40,6 +41,10 @@ interface WaitingRoomSnapshot {
   lastUpdated: string;
   meetingPoint: WaitingLoop["meetingPoint"];
   scheduledAt?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
+  status?: "waitingRoom" | "active" | "completed";
+  venueId?: string | null;
 }
 
 interface MeetingPointOption {
@@ -101,8 +106,9 @@ export function WaitingRoom({
   meetPoints = [],
 }: WaitingRoomProps) {
   const t = useTranslations("waitingRoom");
+  const { firebaseUser, profile, mockMode } = useAuth();
   const [displayName, setDisplayName] = useState("");
-  const [userId, setUserId] = useState<string | null>(null);
+  const [localMockUserId, setLocalMockUserId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,21 +119,49 @@ export function WaitingRoom({
   const [scheduleInput, setScheduleInput] = useState(() =>
     formatInputValue(new Date()),
   );
+  const userId = firebaseUser?.uid ?? localMockUserId;
+  const ownerName = useMemo(() => {
+    if (profile?.displayName) return profile.displayName;
+    if (firebaseUser?.displayName) return firebaseUser.displayName;
+    if (displayName.trim()) return displayName.trim();
+    return undefined;
+  }, [profile?.displayName, firebaseUser?.displayName, displayName]);
+  const claimRequested = useRef(false);
+  useEffect(() => {
+    claimRequested.current = false;
+  }, [roomId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
+    if (!mockMode) {
+      setLocalMockUserId(null);
+      return;
+    }
     const storedId =
       window.localStorage.getItem("loopTestUserId") ?? crypto.randomUUID();
     window.localStorage.setItem("loopTestUserId", storedId);
-    setUserId(storedId);
+    setLocalMockUserId(storedId);
 
     const storedName = window.localStorage.getItem("loopTestUserName");
-    if (storedName) setDisplayName(storedName);
+    if (storedName && !displayName) setDisplayName(storedName);
+  }, [mockMode, displayName]);
 
+  useEffect(() => {
+    if (profile?.displayName && !displayName) {
+      setDisplayName(profile.displayName);
+    }
+  }, [profile?.displayName, displayName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("room", roomId);
     if (venueId) url.searchParams.set("venue", venueId);
+    try {
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    } catch {
+      // ignore history errors
+    }
     setShareUrl(url.toString());
   }, [roomId, venueId]);
 
@@ -141,6 +175,7 @@ export function WaitingRoom({
       return (await response.json()) as WaitingRoomSnapshot;
     },
     refetchInterval: 4_000,
+    enabled: Boolean(roomId),
   });
 
   useEffect(() => {
@@ -161,31 +196,56 @@ export function WaitingRoom({
     }
   }, [data?.scheduledAt]);
 
-  async function mutateRoom(body: Record<string, unknown>) {
-    setError(null);
-    const response = await fetch("/api/test/waiting-room", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  const mutateRoom = useCallback(
+    async (body: Record<string, unknown>) => {
+      setError(null);
+      const payload: Record<string, unknown> = {
         roomId,
         ...body,
-      }),
-    });
-    if (!response.ok) {
-      let message = t("error");
-      try {
-        const payload = await response.json();
-        if (payload?.message) {
-          message = String(payload.message);
+      };
+      if (userId) payload.userId = userId;
+      if (ownerName) payload.ownerName = ownerName;
+      if (venueId) payload.venueId = venueId;
+      const response = await fetch("/api/test/waiting-room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        let message = t("error");
+        try {
+          const payloadResponse = await response.json();
+          if (payloadResponse?.message) {
+            message = String(payloadResponse.message);
+          }
+        } catch {
+          // ignore json errors
         }
-      } catch {
-        // ignore json errors
+        setError(message);
+        throw new Error(message);
       }
-      setError(message);
-      throw new Error(message);
+      await refetch();
+    },
+    [ownerName, refetch, roomId, t, userId, venueId],
+  );
+
+  useEffect(() => {
+    if (!userId || !data) return;
+    const currentOwnerId = data.ownerId;
+    if (currentOwnerId && currentOwnerId !== userId) {
+      claimRequested.current = true;
+      return;
     }
-    await refetch();
-  }
+    if (currentOwnerId === userId) {
+      claimRequested.current = true;
+      return;
+    }
+    if (claimRequested.current) return;
+    claimRequested.current = true;
+    mutateRoom({ action: "claim" }).catch(() => {
+      claimRequested.current = false;
+    });
+  }, [data, mutateRoom, userId]);
 
   async function handleJoin() {
     if (!userId || !displayName.trim()) {
@@ -196,7 +256,6 @@ export function WaitingRoom({
     try {
       await mutateRoom({
         action: "join",
-        userId,
         displayName: displayName.trim(),
       });
       if (typeof window !== "undefined") {
@@ -212,7 +271,7 @@ export function WaitingRoom({
     if (!userId) return;
     setInfo(null);
     try {
-      await mutateRoom({ action: "leave", userId });
+      await mutateRoom({ action: "leave" });
       setInfo(t("leftRoom"));
     } catch {
       // handled in mutateRoom
@@ -220,6 +279,7 @@ export function WaitingRoom({
   }
 
   async function handleReset() {
+    if (!isOwner) return;
     setInfo(null);
     try {
       await mutateRoom({ action: "reset" });
@@ -230,6 +290,7 @@ export function WaitingRoom({
   }
 
   async function handleCapacityChange(value: number) {
+    if (!isOwner) return;
     setCapacity(value);
     setUpdatingCapacity(true);
     try {
@@ -242,6 +303,7 @@ export function WaitingRoom({
   }
 
   async function handleMeetingPointChange(meetPointId: string) {
+    if (!isOwner) return;
     setSelectedMeetPointId(meetPointId);
     if (!meetPointId) {
       return;
@@ -270,6 +332,7 @@ export function WaitingRoom({
   }
 
   async function handleScheduleChange(value: string) {
+    if (!isOwner) return;
     setScheduleInput(value);
     if (!value) {
       return;
@@ -289,9 +352,10 @@ export function WaitingRoom({
   }
 
   async function handleStartLoop() {
+    if (!isOwner) return;
     setInfo(null);
     try {
-      await mutateRoom({ action: "startLoop", userId });
+      await mutateRoom({ action: "startLoop" });
       setInfo(t("loopStarted"));
     } catch {
       // handled
@@ -299,6 +363,7 @@ export function WaitingRoom({
   }
 
   async function handleEndLoop(loopId: string) {
+    if (!isOwner) return;
     setInfo(null);
     try {
       await mutateRoom({ action: "endLoop", loopId });
@@ -334,6 +399,29 @@ export function WaitingRoom({
   const isWaiting =
     !!userId && !!data?.waiting?.some((attendee) => attendee.userId === userId);
 
+  const ownerId = data?.ownerId ?? null;
+  const ownerDisplayName = data?.ownerName ?? null;
+  const isOwner = Boolean(userId && ownerId === userId);
+  const roomStatus = data?.status ?? "waitingRoom";
+  const statusLabelKey =
+    roomStatus === "active"
+      ? "roomStatusActive"
+      : roomStatus === "waitingRoom"
+        ? "roomStatusWaiting"
+        : "roomStatusCompleted";
+  const statusTone: "success" | "neutral" | "warning" =
+    roomStatus === "active"
+      ? "success"
+      : roomStatus === "waitingRoom"
+        ? "neutral"
+        : "warning";
+  const ownerBadgeLabel = isOwner
+    ? t("ownerYouBadge")
+    : ownerDisplayName
+      ? t("ownerOtherBadge", { owner: ownerDisplayName })
+      : null;
+  const ownerHint =
+    !isOwner && ownerDisplayName ? t("ownerLockedHint", { owner: ownerDisplayName }) : null;
   const waiting = data?.waiting ?? [];
   const loops = data?.loops ?? [];
   const lastUpdatedLabel = useMemo(() => {
@@ -346,7 +434,12 @@ export function WaitingRoom({
   }, [data?.lastUpdated]);
 
   const canStartLoop =
-    waiting.length >= 2 && !!data?.meetingPoint?.label && !!data?.scheduledAt;
+    isOwner &&
+    roomStatus === "waitingRoom" &&
+    waiting.length >= 2 &&
+    !!data?.meetingPoint?.label &&
+    !!data?.scheduledAt &&
+    !matchedLoop;
   const meetingPointSummary = data?.meetingPoint?.label
     ? `${data.meetingPoint.label}${data.meetingPoint.description ? ` · ${data.meetingPoint.description}` : ""}`
     : null;
@@ -390,6 +483,15 @@ export function WaitingRoom({
                 })}
               </p>
             )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Badge tone={statusTone}>{t(statusLabelKey)}</Badge>
+              {ownerBadgeLabel && <Badge tone={isOwner ? "success" : "neutral"}>{ownerBadgeLabel}</Badge>}
+            </div>
+            {ownerHint && (
+              <p className="text-xs text-loop-slate/60">
+                {ownerHint}
+              </p>
+            )}
           </div>
         </div>
       </Card>
@@ -415,7 +517,7 @@ export function WaitingRoom({
               className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
               value={capacity}
               onChange={(event) => handleCapacityChange(Number(event.target.value))}
-              disabled={updatingCapacity}
+              disabled={updatingCapacity || !isOwner}
             >
               {[2, 3, 4].map((value) => (
                 <option key={value} value={value}>
@@ -433,6 +535,7 @@ export function WaitingRoom({
                 className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-xs sm:text-sm min-h-[44px]"
                 value={selectedMeetPointId}
                 onChange={(event) => handleMeetingPointChange(event.target.value)}
+                disabled={!isOwner}
               >
                 <option value="">
                   {t("meetPointPlaceholder")}
@@ -469,6 +572,7 @@ export function WaitingRoom({
               min={scheduleMin}
               max={scheduleMax}
               onChange={(event) => handleScheduleChange(event.target.value)}
+              disabled={!isOwner}
             />
             <p className="mt-1 text-xs text-loop-slate/60">{t("scheduleHint")}</p>
           </div>
@@ -481,16 +585,16 @@ export function WaitingRoom({
           <Button variant="secondary" onClick={handleStartLoop} disabled={!canStartLoop}>
             {t("startLoopButton")}
           </Button>
-          {matchedLoop && (
+          {matchedLoop && isOwner && (
             <Button variant="danger" onClick={() => handleEndLoop(matchedLoop.id)}>
               {t("endLoopButton")}
             </Button>
           )}
-          <Button variant="ghost" onClick={handleReset}>
+          <Button variant="ghost" onClick={handleReset} disabled={!isOwner}>
             {t("resetButton")}
           </Button>
         </div>
-        {!canStartLoop && (
+        {!canStartLoop && isOwner && (
           <p className="text-xs text-loop-slate/60">{t("startLoopDisabled")}</p>
         )}
         <p className="text-xs text-loop-slate/60">{t("autoLockHint")}</p>
@@ -608,56 +712,68 @@ export function WaitingRoom({
                 {t("emptyLoops")}
               </p>
             )}
-            {loops.map((loop) => (
-              <div
-                key={loop.id}
-                className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2 sm:py-3"
-              >
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate min-w-0">
-                    {t("loopLabel", { id: loop.id })}
+            {loops.map((loop) => {
+              const loopIsActive = loop.status === "active" || loop.status === "inProgress";
+              const loopIsWaiting = loop.status === "waitingRoom";
+              const loopTone: "success" | "neutral" | "warning" = loopIsActive
+                ? "success"
+                : loopIsWaiting
+                  ? "neutral"
+                  : "warning";
+              const loopLabel = loopIsActive
+                ? t("loopStatusActive")
+                : loopIsWaiting
+                  ? t("loopStatusWaiting")
+                  : t("loopStatusCompleted");
+              return (
+                <div
+                  key={loop.id}
+                  className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2 sm:py-3"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate min-w-0">
+                      {t("loopLabel", { id: loop.id })}
+                    </p>
+                    <Badge tone={loopTone} className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
+                      {loopLabel}
+                    </Badge>
+                  </div>
+                  {loop.meetingPoint?.label && (
+                    <p className="mt-1 text-xs sm:text-sm text-loop-slate/80 break-words">
+                      {t("loopMeetingPoint")}: {loop.meetingPoint.label}
+                      {loop.meetingPoint.description
+                        ? ` · ${loop.meetingPoint.description}`
+                        : ""}
+                    </p>
+                  )}
+                  {loop.scheduledAt && (
+                    <p className="text-xs text-loop-slate/60 break-words">
+                      {t("loopScheduledAt", {
+                        time: formatDateDisplay(loop.scheduledAt),
+                      })}
+                    </p>
+                  )}
+                  {loop.startedAt && (
+                    <p className="text-xs text-loop-slate/60 break-words">
+                      {t("loopStartedAt", {
+                        time: formatDateDisplay(loop.startedAt),
+                      })}
+                    </p>
+                  )}
+                  {loop.durationMinutes && loop.status === "completed" && (
+                    <p className="text-xs text-loop-slate/60 break-words">
+                      {t("loopDuration", { minutes: loop.durationMinutes })}
+                      {loop.autoClosed && (
+                        <span className="ml-1">· {t("loopAutoClosed")}</span>
+                      )}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs sm:text-sm text-loop-slate/70 break-words">
+                    {loop.participants.map((p) => p.alias).join(", ")}
                   </p>
-                  <Badge tone={loop.status === "inProgress" ? "success" : "neutral"} className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
-                    {loop.status === "inProgress"
-                      ? t("loopStatusActive")
-                      : t("loopStatusCompleted")}
-                  </Badge>
                 </div>
-                {loop.meetingPoint?.label && (
-                  <p className="mt-1 text-xs sm:text-sm text-loop-slate/80 break-words">
-                    {t("loopMeetingPoint")}: {loop.meetingPoint.label}
-                    {loop.meetingPoint.description
-                      ? ` · ${loop.meetingPoint.description}`
-                      : ""}
-                  </p>
-                )}
-                {loop.scheduledAt && (
-                  <p className="text-xs text-loop-slate/60 break-words">
-                    {t("loopScheduledAt", {
-                      time: formatDateDisplay(loop.scheduledAt),
-                    })}
-                  </p>
-                )}
-                {loop.startedAt && (
-                  <p className="text-xs text-loop-slate/60 break-words">
-                    {t("loopStartedAt", {
-                      time: formatDateDisplay(loop.startedAt),
-                    })}
-                  </p>
-                )}
-                {loop.durationMinutes && loop.status === "completed" && (
-                  <p className="text-xs text-loop-slate/60 break-words">
-                    {t("loopDuration", { minutes: loop.durationMinutes })}
-                    {loop.autoClosed && (
-                      <span className="ml-1">· {t("loopAutoClosed")}</span>
-                    )}
-                  </p>
-                )}
-                <p className="mt-2 text-xs sm:text-sm text-loop-slate/70 break-words">
-                  {loop.participants.map((p) => p.alias).join(", ")}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       </div>

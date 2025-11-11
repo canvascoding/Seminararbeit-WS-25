@@ -3,8 +3,10 @@ import { getMessages } from "next-intl/server";
 import { NextIntlClientProvider } from "next-intl";
 import { Space_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { cookies } from "next/headers";
 import { AppProviders } from "@/providers/app-providers";
 import { cn } from "@/lib/utils";
+import { ConsentState } from "@/providers/consent-provider";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -43,6 +45,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const messages = await getMessages();
+  const cookieStore = await cookies();
+  const storedConsent = cookieStore.get("loop-consent")?.value as
+    | ConsentState
+    | undefined;
+
+  const initialConsent: ConsentState =
+    storedConsent === "granted" || storedConsent === "denied"
+      ? storedConsent
+      : "pending";
 
   return (
     <html lang="de" className="scroll-smooth bg-loop-sand">
@@ -54,7 +65,7 @@ export default async function RootLayout({
         )}
       >
         <NextIntlClientProvider messages={messages} locale="de">
-          <AppProviders>{children}</AppProviders>
+          <AppProviders initialConsent={initialConsent}>{children}</AppProviders>
         </NextIntlClientProvider>
       </body>
     </html>

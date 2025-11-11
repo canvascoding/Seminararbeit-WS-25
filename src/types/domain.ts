@@ -64,14 +64,37 @@ export interface Slot {
   restSeats?: number;
 }
 
+export type LoopStatus =
+  | "waitingRoom"
+  | "active"
+  | "completed"
+  | "scheduled"
+  | "inProgress"
+  | "done";
+
+export interface LoopParticipantProfile {
+  userId: string;
+  alias: string;
+  joinedAt: string;
+}
+
 export interface Loop {
   id: string;
-  slotId: string;
-  venueId: string;
+  slotId?: string | null;
+  roomId?: string | null;
+  venueId?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
   participants: string[];
-  meetPoint: { label: string; description: string };
-  startAt: string;
-  status: "scheduled" | "inProgress" | "done";
+  participantProfiles?: LoopParticipantProfile[];
+  meetPoint?: { label: string; description?: string | null };
+  startAt?: string;
+  scheduledAt?: string;
+  createdAt?: string;
+  endedAt?: string | null;
+  durationMinutes?: number;
+  autoClosed?: boolean;
+  status: LoopStatus;
 }
 
 export interface SlotAttendee {

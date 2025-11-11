@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import type { SlotAttendee } from "@/types/domain";
+import { getAdminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 
 const LOOP_AUTO_CLOSE_MS = 60 * 60 * 1000;
 const MAX_LOOP_HISTORY = 12;
 const MIN_PARTICIPANTS = 2;
+
+const forceMock =
+  process.env.NEXT_PUBLIC_FORCE_MOCK === "true" ||
+  process.env.FORCE_MOCK_DATA === "true";
+
+const useMock = forceMock || !isFirebaseAdminConfigured;
 
 interface RoomMeetingPoint {
   id?: string | null;
@@ -17,34 +24,146 @@ interface WaitingParticipant {
   joinedAt: string;
 }
 
+type LoopPhase = "waitingRoom" | "active" | "completed";
+
 interface RoomLoop {
   id: string;
   participantIds: string[];
   participants: WaitingParticipant[];
   createdAt: string;
   meetingPoint: RoomMeetingPoint | null;
-  scheduledAt: string;
-  startedAt: string;
+  scheduledAt: string | null;
+  startedAt: string | null;
   endedAt?: string | null;
-  status: "inProgress" | "completed";
+  status: LoopPhase;
   durationMinutes?: number;
   autoClosed?: boolean;
   createdBy?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
 }
 
 interface RoomState {
+  roomId: string;
+  venueId?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
   capacity: number;
   attendees: SlotAttendee[];
   loops: RoomLoop[];
   profiles: Record<string, { name: string }>;
   meetingPoint: RoomMeetingPoint | null;
   scheduledAt: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const rooms = new Map<string, RoomState>();
 
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 function nowIso() {
   return new Date().toISOString();
+}
+
+function createEmptyRoom(roomId: string): RoomState {
+  const timestamp = nowIso();
+  return {
+    roomId,
+    capacity: 4,
+    attendees: [],
+    loops: [],
+    profiles: {},
+    meetingPoint: null,
+    scheduledAt: timestamp,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+function normalizeRoom(roomId: string, source?: Partial<RoomState>): RoomState {
+  const base = createEmptyRoom(roomId);
+  return {
+    ...base,
+    ...source,
+    roomId,
+    capacity: source?.capacity ?? base.capacity,
+    attendees: source?.attendees ?? base.attendees,
+    loops: source?.loops ?? base.loops,
+    profiles: source?.profiles ?? base.profiles,
+    meetingPoint: source?.meetingPoint ?? base.meetingPoint,
+    scheduledAt: source?.scheduledAt ?? base.scheduledAt,
+    createdAt: source?.createdAt ?? base.createdAt,
+    updatedAt: source?.updatedAt ?? base.updatedAt,
+  };
+}
+
+async function loadRoom(roomId: string): Promise<RoomState> {
+  if (useMock) {
+    if (!rooms.has(roomId)) {
+      rooms.set(roomId, createEmptyRoom(roomId));
+    }
+    return rooms.get(roomId)!;
+  }
+
+  const db = getAdminDb();
+  const doc = await db.collection("waitingRooms").doc(roomId).get();
+  if (!doc.exists) {
+    const room = createEmptyRoom(roomId);
+    await persistRoom(room);
+    return room;
+  }
+  return normalizeRoom(roomId, doc.data() as Partial<RoomState>);
+}
+
+async function persistRoom(room: RoomState) {
+  room.updatedAt = nowIso();
+  if (useMock) {
+    rooms.set(room.roomId, room);
+    return;
+  }
+  const db = getAdminDb();
+  await db.collection("waitingRooms").doc(room.roomId).set(room);
+}
+
+async function getRoom(roomId: string) {
+  const room = await loadRoom(roomId);
+  if (!room.scheduledAt) {
+    room.scheduledAt = nowIso();
+  }
+  return room;
+}
+
+function deriveRoomStatus(room: RoomState): LoopPhase {
+  if (room.loops.some((loop) => loop.status === "active")) return "active";
+  if (room.loops.some((loop) => loop.status === "waitingRoom")) return "waitingRoom";
+  return "completed";
+}
+
+function buildSnapshot(room: RoomState) {
+  return {
+    roomId: room.roomId,
+    capacity: room.capacity,
+    scheduledAt: room.scheduledAt,
+    meetingPoint: room.meetingPoint,
+    waiting: room.attendees.map<WaitingParticipant>((attendee) => ({
+      userId: attendee.userId,
+      joinedAt: attendee.joinedAt,
+      alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
+    })),
+    loops: room.loops.slice(0, MAX_LOOP_HISTORY),
+    lastUpdated: nowIso(),
+    ownerId: room.ownerId ?? null,
+    ownerName: room.ownerName ?? null,
+    status: deriveRoomStatus(room),
+    venueId: room.venueId ?? null,
+  };
 }
 
 function validateScheduleInput(value?: string | null) {
@@ -78,7 +197,7 @@ function finalizeLoop(loop: RoomLoop, endedAt: string, autoClosed: boolean) {
   loop.status = "completed";
   loop.endedAt = endedAt;
   loop.autoClosed = autoClosed;
-  const startedAt = new Date(loop.startedAt).getTime();
+  const startedAt = loop.startedAt ? new Date(loop.startedAt).getTime() : NaN;
   const finishedAt = new Date(endedAt).getTime();
   if (Number.isFinite(startedAt) && Number.isFinite(finishedAt)) {
     const durationMinutes = Math.max(
@@ -90,56 +209,81 @@ function finalizeLoop(loop: RoomLoop, endedAt: string, autoClosed: boolean) {
 }
 
 function autoCloseLoops(room: RoomState) {
+  let changed = false;
   const now = Date.now();
   room.loops.forEach((loop) => {
-    if (loop.status === "completed" || loop.endedAt) {
+    if (loop.status !== "active" || loop.endedAt) {
       return;
     }
-    const startedAt = new Date(loop.startedAt ?? loop.createdAt).getTime();
+    const startedAt = loop.startedAt
+      ? new Date(loop.startedAt).getTime()
+      : NaN;
     if (!Number.isFinite(startedAt)) {
       return;
     }
     if (startedAt + LOOP_AUTO_CLOSE_MS <= now) {
       const endedAt = new Date(startedAt + LOOP_AUTO_CLOSE_MS).toISOString();
       finalizeLoop(loop, endedAt, true);
+      changed = true;
     }
   });
+  if (changed && room.ownerId) {
+    ensureWaitingLoop(room);
+  }
+  return changed;
 }
 
-function getRoom(roomId: string): RoomState {
-  if (!rooms.has(roomId)) {
-    rooms.set(roomId, {
-      capacity: 4,
-      attendees: [],
-      loops: [],
-      profiles: {},
-      meetingPoint: null,
-      scheduledAt: nowIso(),
-    });
+function ensureWaitingLoop(room: RoomState) {
+  const existing = room.loops.find((loop) => loop.status === "waitingRoom");
+  if (existing) {
+    existing.meetingPoint = room.meetingPoint;
+    existing.scheduledAt = room.scheduledAt;
+    return existing;
   }
-  const room = rooms.get(roomId)!;
-  if (!room.scheduledAt) {
-    room.scheduledAt = nowIso();
-  }
-  return room;
-}
-
-function serializeRoom(roomId: string) {
-  const room = getRoom(roomId);
-  autoCloseLoops(room);
-  return {
-    roomId,
-    capacity: room.capacity,
-    scheduledAt: room.scheduledAt,
+  const loop: RoomLoop = {
+    id: `loop-${room.roomId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    participantIds: [],
+    participants: [],
+    createdAt: nowIso(),
     meetingPoint: room.meetingPoint,
-    waiting: room.attendees.map<WaitingParticipant>((attendee) => ({
-      userId: attendee.userId,
-      joinedAt: attendee.joinedAt,
-      alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
-    })),
-    loops: room.loops,
-    lastUpdated: nowIso(),
+    scheduledAt: room.scheduledAt,
+    startedAt: null,
+    endedAt: null,
+    status: "waitingRoom",
+    createdBy: room.ownerId ?? null,
+    ownerId: room.ownerId ?? null,
+    ownerName: room.ownerName ?? null,
   };
+  room.loops = [loop, ...room.loops].slice(0, MAX_LOOP_HISTORY);
+  return loop;
+}
+
+function ensureOwner(
+  room: RoomState,
+  userId?: string | null,
+  ownerName?: string | null,
+) {
+  if (!userId) {
+    throw new HttpError(
+      403,
+      "Nur angemeldete Nutzer:innen können den Warteraum verwalten.",
+    );
+  }
+  if (!room.ownerId) {
+    room.ownerId = userId;
+    room.ownerName = ownerName ?? room.ownerName ?? null;
+    ensureWaitingLoop(room);
+    return;
+  }
+  if (room.ownerId !== userId) {
+    throw new HttpError(
+      403,
+      "Nur der Ersteller dieses Warteraums darf diese Aktion ausführen.",
+    );
+  }
+  if (ownerName && ownerName !== room.ownerName) {
+    room.ownerName = ownerName;
+  }
 }
 
 export async function GET(request: Request) {
@@ -148,8 +292,12 @@ export async function GET(request: Request) {
   if (!roomId) {
     return NextResponse.json({ message: "roomId fehlt" }, { status: 400 });
   }
-
-  return NextResponse.json(serializeRoom(roomId));
+  const room = await getRoom(roomId);
+  const changed = autoCloseLoops(room);
+  if (changed) {
+    await persistRoom(room);
+  }
+  return NextResponse.json(buildSnapshot(room));
 }
 
 export async function POST(request: Request) {
@@ -163,152 +311,170 @@ export async function POST(request: Request) {
   if (!roomId) {
     return NextResponse.json({ message: "roomId fehlt" }, { status: 400 });
   }
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
   autoCloseLoops(room);
-  const action = payload.action;
 
-  switch (action) {
-    case "join": {
-      const userId = payload.userId as string | undefined;
-      const displayName = (payload.displayName as string | undefined)?.trim();
-      if (!userId || !displayName) {
-        return NextResponse.json(
-          { message: "userId und displayName erforderlich" },
-          { status: 400 },
-        );
+  const action = payload.action;
+  const userId = payload.userId as string | undefined;
+  const ownerName =
+    (payload.ownerName as string | undefined)?.trim() ||
+    (payload.displayName as string | undefined)?.trim();
+  const venueId = payload.venueId as string | undefined;
+  if (venueId) {
+    room.venueId = venueId;
+  }
+
+  try {
+    switch (action) {
+      case "claim": {
+        ensureOwner(room, userId, ownerName);
+        break;
       }
-      room.attendees = room.attendees.filter(
-        (attendee) => attendee.userId !== userId,
-      );
-      room.attendees.push({
-        slotId: roomId,
-        userId,
-        joinedAt: nowIso(),
-        status: "pending",
-      });
-      room.profiles[userId] = { name: displayName };
-      break;
-    }
-    case "leave": {
-      const userId = payload.userId as string | undefined;
-      if (userId) {
+      case "join": {
+        const displayName = (payload.displayName as string | undefined)?.trim();
+        if (!userId || !displayName) {
+          throw new HttpError(
+            400,
+            "userId und displayName erforderlich",
+          );
+        }
         room.attendees = room.attendees.filter(
           (attendee) => attendee.userId !== userId,
         );
+        room.attendees.push({
+          slotId: roomId,
+          userId,
+          joinedAt: nowIso(),
+          status: "pending",
+        });
+        room.profiles[userId] = { name: displayName };
+        break;
       }
-      break;
-    }
-    case "reset": {
-      room.attendees = [];
-      room.loops = [];
-      room.scheduledAt = nowIso();
-      break;
-    }
-    case "configure": {
-      if ("capacity" in payload) {
-        const capacity = Number(payload.capacity);
-        if (!Number.isFinite(capacity) || capacity < 2 || capacity > 4) {
-          return NextResponse.json(
-            { message: "Kapazität zwischen 2 und 4 notwendig" },
-            { status: 400 },
+      case "leave": {
+        if (userId) {
+          room.attendees = room.attendees.filter(
+            (attendee) => attendee.userId !== userId,
           );
         }
-        room.capacity = Math.round(capacity);
+        break;
       }
-      if ("scheduledAt" in payload) {
-        const scheduleInput = payload.scheduledAt as string | null | undefined;
-        const validation = validateScheduleInput(scheduleInput);
-        if (!validation.ok || !validation.iso) {
-          return NextResponse.json(
-            { message: validation.message ?? "Startzeit ungültig" },
-            { status: 400 },
+      case "reset": {
+        ensureOwner(room, userId, ownerName);
+        room.attendees = [];
+        room.meetingPoint = null;
+        room.scheduledAt = nowIso();
+        room.loops = room.loops
+          .filter((loop) => loop.status === "completed")
+          .slice(0, MAX_LOOP_HISTORY);
+        ensureWaitingLoop(room);
+        break;
+      }
+      case "configure": {
+        ensureOwner(room, userId, ownerName);
+        if ("capacity" in payload) {
+          const capacity = Number(payload.capacity);
+          if (!Number.isFinite(capacity) || capacity < 2 || capacity > 4) {
+            throw new HttpError(
+              400,
+              "Kapazität zwischen 2 und 4 notwendig",
+            );
+          }
+          room.capacity = Math.round(capacity);
+        }
+        if ("scheduledAt" in payload) {
+          const scheduleInput = payload.scheduledAt as string | null | undefined;
+          const validation = validateScheduleInput(scheduleInput);
+          if (!validation.ok || !validation.iso) {
+            throw new HttpError(
+              400,
+              validation.message ?? "Startzeit ungültig",
+            );
+          }
+          room.scheduledAt = validation.iso;
+        }
+        if (payload.meetPointLabel) {
+          const label = String(payload.meetPointLabel).trim();
+          if (!label) {
+            throw new HttpError(400, "Treffpunkt-Label fehlt.");
+          }
+          room.meetingPoint = {
+            id: (payload.meetPointId as string | undefined) ?? null,
+            label,
+            description:
+              (payload.meetPointDescription as string | undefined)?.trim() || null,
+          };
+        }
+        ensureWaitingLoop(room);
+        break;
+      }
+      case "startLoop": {
+        ensureOwner(room, userId, ownerName);
+        if (!room.meetingPoint) {
+          throw new HttpError(
+            400,
+            "Bitte zuerst einen Treffpunkt auswählen.",
           );
         }
-        room.scheduledAt = validation.iso;
-      }
-      if (payload.meetPointLabel) {
-        const label = String(payload.meetPointLabel).trim();
-        if (!label) {
-          return NextResponse.json(
-            { message: "Treffpunkt-Label fehlt." },
-            { status: 400 },
+        const queue = [...room.attendees].sort(
+          (a, b) =>
+            new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
+        );
+        if (queue.length < MIN_PARTICIPANTS) {
+          throw new HttpError(
+            400,
+            "Mindestens zwei Personen notwendig, um ein Loop zu starten.",
           );
         }
-        room.meetingPoint = {
-          id: (payload.meetPointId as string | undefined) ?? null,
-          label,
-          description:
-            (payload.meetPointDescription as string | undefined)?.trim() || null,
-        };
+        const maxParticipants = Math.min(room.capacity, queue.length);
+        const selected = queue.slice(0, maxParticipants);
+        const selectedIds = new Set(selected.map((entry) => entry.userId));
+        room.attendees = room.attendees.filter(
+          (attendee) => !selectedIds.has(attendee.userId),
+        );
+        const timestamp = nowIso();
+        const participants = selected.map<WaitingParticipant>((attendee) => ({
+          userId: attendee.userId,
+          joinedAt: attendee.joinedAt,
+          alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
+        }));
+        const loop = ensureWaitingLoop(room);
+        loop.status = "active";
+        loop.startedAt = timestamp;
+        loop.meetingPoint = room.meetingPoint;
+        loop.scheduledAt = room.scheduledAt ?? timestamp;
+        loop.participants = participants;
+        loop.participantIds = participants.map((participant) => participant.userId);
+        loop.createdBy = userId ?? loop.createdBy ?? null;
+        loop.ownerId = room.ownerId ?? null;
+        loop.ownerName = room.ownerName ?? null;
+        break;
       }
-      break;
+      case "endLoop": {
+        ensureOwner(room, userId, ownerName);
+        const loopId = payload.loopId as string | undefined;
+        if (!loopId) {
+          throw new HttpError(400, "loopId erforderlich");
+        }
+        const loop = room.loops.find((item) => item.id === loopId);
+        if (!loop) {
+          throw new HttpError(404, "Loop nicht gefunden");
+        }
+        if (!loop.endedAt && loop.status !== "completed") {
+          finalizeLoop(loop, nowIso(), false);
+        }
+        ensureWaitingLoop(room);
+        break;
+      }
+      default:
+        throw new HttpError(400, "Unbekannte Aktion");
     }
-    case "startLoop": {
-      if (!room.meetingPoint) {
-        return NextResponse.json(
-          { message: "Bitte zuerst einen Treffpunkt auswählen." },
-          { status: 400 },
-        );
-      }
-      const queue = [...room.attendees].sort(
-        (a, b) =>
-          new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
-      );
-      if (queue.length < MIN_PARTICIPANTS) {
-        return NextResponse.json(
-          { message: "Mindestens zwei Personen notwendig, um ein Loop zu starten." },
-          { status: 400 },
-        );
-      }
-      const maxParticipants = Math.min(room.capacity, queue.length);
-      const selected = queue.slice(0, maxParticipants);
-      const selectedIds = new Set(selected.map((entry) => entry.userId));
-      room.attendees = room.attendees.filter(
-        (attendee) => !selectedIds.has(attendee.userId),
-      );
-      const timestamp = nowIso();
-      const participants = selected.map<WaitingParticipant>((attendee) => ({
-        userId: attendee.userId,
-        joinedAt: attendee.joinedAt,
-        alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
-      }));
-      const loop: RoomLoop = {
-        id: `loop-${roomId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        participantIds: participants.map((participant) => participant.userId),
-        participants,
-        createdAt: timestamp,
-        meetingPoint: room.meetingPoint,
-        scheduledAt: room.scheduledAt ?? timestamp,
-        startedAt: timestamp,
-        status: "inProgress",
-        createdBy: (payload.userId as string | undefined) ?? null,
-      };
-      room.loops = [loop, ...room.loops].slice(0, MAX_LOOP_HISTORY);
-      break;
+  } catch (error) {
+    if (error instanceof HttpError) {
+      return NextResponse.json({ message: error.message }, { status: error.status });
     }
-    case "endLoop": {
-      const loopId = payload.loopId as string | undefined;
-      if (!loopId) {
-        return NextResponse.json(
-          { message: "loopId erforderlich" },
-          { status: 400 },
-        );
-      }
-      const loop = room.loops.find((item) => item.id === loopId);
-      if (!loop) {
-        return NextResponse.json(
-          { message: "Loop nicht gefunden" },
-          { status: 404 },
-        );
-      }
-      if (!loop.endedAt) {
-        finalizeLoop(loop, nowIso(), false);
-      }
-      break;
-    }
-    default:
-      return NextResponse.json({ message: "Unbekannte Aktion" }, { status: 400 });
+    throw error;
   }
 
-  return NextResponse.json(serializeRoom(roomId));
+  await persistRoom(room);
+  return NextResponse.json(buildSnapshot(room));
 }
