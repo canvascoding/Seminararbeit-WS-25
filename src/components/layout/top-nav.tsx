@@ -34,6 +34,20 @@ type VenueChangeDetail = {
   venueName?: string;
 };
 
+declare global {
+  interface WindowEventMap {
+    checkedInVenueChanged: CustomEvent<VenueChangeDetail>;
+  }
+}
+
+const scheduleStateUpdate = (callback: () => void) => {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(callback);
+    return;
+  }
+  setTimeout(callback, 0);
+};
+
 export function TopNav() {
   const t = useTranslations("common");
   const pathname = usePathname();
@@ -68,25 +82,33 @@ export function TopNav() {
   // Read the checked-in venue from sessionStorage on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     if (!profile) {
-      setCurrentVenueId(DEFAULT_VENUE_ID);
-      setCurrentVenueName(null);
-      setIsCheckedIn(false);
+      scheduleStateUpdate(() => {
+        setCurrentVenueId(DEFAULT_VENUE_ID);
+        setCurrentVenueName(null);
+        setIsCheckedIn(false);
+      });
       return;
     }
 
-    const storedVenue = window.sessionStorage.getItem("checkedInVenue");
-    const storedVenueName = window.sessionStorage.getItem("checkedInVenueName");
-    if (storedVenue) {
-      setCurrentVenueId(storedVenue);
-      setIsCheckedIn(true);
-    } else {
-      setIsCheckedIn(false);
-    }
-    if (storedVenueName) setCurrentVenueName(storedVenueName);
+    const hydrateFromSession = () => {
+      const storedVenue = window.sessionStorage.getItem("checkedInVenue");
+      const storedVenueName = window.sessionStorage.getItem("checkedInVenueName");
+      if (storedVenue) {
+        setCurrentVenueId(storedVenue);
+        setIsCheckedIn(true);
+      } else {
+        setCurrentVenueId(DEFAULT_VENUE_ID);
+        setIsCheckedIn(false);
+      }
+      setCurrentVenueName(storedVenueName);
+    };
 
-    function handleVenueChange(event: Event) {
-      const detail = (event as CustomEvent<VenueChangeDetail>).detail ?? {};
+    scheduleStateUpdate(hydrateFromSession);
+
+    const handleVenueChange = (event: WindowEventMap["checkedInVenueChanged"]) => {
+      const detail = event.detail ?? {};
       if (detail.venueId) {
         setCurrentVenueId(detail.venueId);
         setCurrentVenueName(detail.venueName ?? null);
@@ -96,11 +118,11 @@ export function TopNav() {
         setCurrentVenueName(null);
         setIsCheckedIn(false);
       }
-    }
+    };
 
-    window.addEventListener("checkedInVenueChanged" as any, handleVenueChange as EventListener);
+    window.addEventListener("checkedInVenueChanged", handleVenueChange);
     return () => {
-      window.removeEventListener("checkedInVenueChanged" as any, handleVenueChange as EventListener);
+      window.removeEventListener("checkedInVenueChanged", handleVenueChange);
     };
   }, [profile]);
 
@@ -109,7 +131,7 @@ export function TopNav() {
     const shouldShowNotice = window.sessionStorage.getItem(CHECKIN_NOTICE_STORAGE_KEY);
     if (shouldShowNotice) {
       window.sessionStorage.removeItem(CHECKIN_NOTICE_STORAGE_KEY);
-      displayCheckInNotice();
+      scheduleStateUpdate(displayCheckInNotice);
     }
   }, [displayCheckInNotice]);
 

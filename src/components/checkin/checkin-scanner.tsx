@@ -55,7 +55,7 @@ export function CheckInScanner({
           ? `/slots/${venueId}`
           : `/waiting-room?${new URLSearchParams({ venue: venueId }).toString()}`;
       navigatingRef.current = true;
-      router.push(target as any);
+      router.push(target);
     },
     [router],
   );
@@ -137,17 +137,29 @@ export function CheckInScanner({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const storedVenue = window.sessionStorage.getItem("checkedInVenue");
-    const storedVenueName = window.sessionStorage.getItem("checkedInVenueName");
-    if (storedVenue) {
-      setIsCheckedIn(true);
-      setLastDetectedVenue((previous) => previous ?? storedVenue);
-      setManualVenue(storedVenue);
-    }
-    if (storedVenueName) {
-      setActiveVenueName(storedVenueName);
-    }
-  }, [initialVenueId]);
+
+    const hydrateFromSession = () => {
+      const storedVenue = window.sessionStorage.getItem("checkedInVenue");
+      const storedVenueName = window.sessionStorage.getItem("checkedInVenueName");
+      if (storedVenue) {
+        setIsCheckedIn(true);
+        setLastDetectedVenue((previous) => previous ?? storedVenue);
+        setManualVenue(storedVenue);
+      }
+      if (storedVenueName) {
+        setActiveVenueName(storedVenueName);
+      }
+    };
+
+    const scheduleHydration: (cb: () => void) => void =
+      typeof queueMicrotask === "function"
+        ? queueMicrotask
+        : (cb) => {
+            setTimeout(cb, 0);
+          };
+
+    scheduleHydration(hydrateFromSession);
+  }, []);
 
   const closePrompt = useCallback((reason: "navigation" | null = null) => {
     promptDismissReasonRef.current = reason;

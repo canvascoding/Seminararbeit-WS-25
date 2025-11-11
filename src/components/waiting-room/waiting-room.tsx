@@ -241,7 +241,7 @@ export function WaitingRoom({
     } else {
       setCapacitySelection("");
     }
-  }, [data?.capacity, data?.capacityConfirmed, updatingCapacity]);
+  }, [data, updatingCapacity]);
 
   useEffect(() => {
     if (data?.meetingPoint?.id) {

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
 
@@ -53,7 +54,11 @@ export default function DatenschutzPage() {
             </li>
             <li>
               Nur die unbedingt erforderlichen Cookies, wie nachfolgend beschrieben. Details enthält
-              die <a className="underline" href="/cookie-richtlinie">Cookie-Richtlinie</a>.
+              die{" "}
+              <Link className="underline" href="/cookie-richtlinie">
+                Cookie-Richtlinie
+              </Link>
+              .
             </li>
           </ul>
         </section>
@@ -65,9 +70,9 @@ export default function DatenschutzPage() {
             erforderlich sind (Session-Cookies für Login und Sicherheits-Tokens). Optionales Tracking
             oder Marketing-Cookies werden nicht gesetzt. Umfang, Zweck und Speicherdauer der
             eingesetzten Cookies sind in der{" "}
-            <a className="underline" href="/cookie-richtlinie">
+            <Link className="underline" href="/cookie-richtlinie">
               Cookie-Richtlinie
-            </a>{" "}
+            </Link>{" "}
             beschrieben.
           </p>
         </section>

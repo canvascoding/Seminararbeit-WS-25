@@ -22,7 +22,7 @@ type RoomLoopFeedback = {
   submittedBy?: string | null;
 };
 
-type LoopPhase = "waitingRoom" | "active" | "completed" | "inProgress";
+type LoopPhase = "waitingRoom" | "active" | "completed" | "inProgress" | "scheduled" | "done";
 
 interface LoopSummary {
   id: string;
@@ -75,7 +75,7 @@ interface StoredLoop {
   createdAt?: string | null;
   durationMinutes?: number;
   autoClosed?: boolean;
-  feedback?: LoopFeedback | null;
+  feedback?: RoomLoopFeedback | null;
 }
 
 interface StoredRoom {
@@ -103,7 +103,7 @@ function normalizeParticipants(
         email: null,
       }));
     }
-    return loop.participants.map((participant) => ({
+    return (loop.participants as StoredParticipant[]).map((participant) => ({
       userId: participant.userId ?? participant?.uid ?? "",
       alias: participant.alias ?? participant.userId ?? "Gast",
       joinedAt:

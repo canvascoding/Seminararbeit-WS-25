@@ -45,12 +45,9 @@ function clearAnalyticsCookies() {
 export function GoogleTag() {
   const { consent } = useConsent();
   const [tagLoaded, setTagLoaded] = useState(false);
-  const [shouldLoadTag, setShouldLoadTag] = useState(() => consent === "granted");
+  const shouldLoadTag = consent === "granted" || tagLoaded;
 
   useEffect(() => {
-    if (consent === "granted") {
-      setShouldLoadTag(true);
-    }
     if (consent !== "granted") {
       clearAnalyticsCookies();
     }

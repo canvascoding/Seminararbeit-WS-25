@@ -8,7 +8,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc } from "firebase/firestore";
 import { z } from "zod";
 import { getFirebaseAuth, getFirebaseDb } from "./client";
 import {

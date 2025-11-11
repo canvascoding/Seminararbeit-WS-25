@@ -199,7 +199,7 @@ export function LoopCenter() {
         </div>
         <div className="flex items-center gap-2">
           {isFetching && <Loader2 className="h-4 w-4 animate-spin text-loop-green" />}
-          <Button variant="ghost" size="sm" onClick={() => refetch()}>
+          <Button variant="ghost" onClick={() => refetch()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             {t("refresh")}
           </Button>
@@ -209,7 +209,6 @@ export function LoopCenter() {
       <Card className="p-2 flex flex-wrap gap-2">
         <Button
           variant={tab === "active" ? "primary" : "ghost"}
-          size="sm"
           onClick={() => {
             resetFeedbackState();
             setTab("active");
@@ -220,7 +219,6 @@ export function LoopCenter() {
         </Button>
         <Button
           variant={tab === "history" ? "primary" : "ghost"}
-          size="sm"
           onClick={() => {
             resetFeedbackState();
             setTab("history");

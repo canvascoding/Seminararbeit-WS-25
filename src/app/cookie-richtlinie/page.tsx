@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
 
@@ -101,9 +102,9 @@ export default function CookiePolicyPage() {
               info@canvas.holdings
             </a>
             . Weitere Informationen zu Ihren Rechten finden Sie in unserer{" "}
-            <a className="underline" href="/datenschutz">
+            <Link className="underline" href="/datenschutz">
               Datenschutzerklärung
-            </a>
+            </Link>
             .
           </p>
         </section>
