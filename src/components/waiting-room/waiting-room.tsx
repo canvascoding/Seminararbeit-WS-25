@@ -43,6 +43,7 @@ interface LoopFeedback {
 
 interface WaitingLoop {
   id: string;
+  ownerId?: string;
   participantIds: string[];
   participants: WaitingParticipant[];
   createdAt: string;
@@ -909,7 +910,7 @@ export function WaitingRoom({
                       placeholder={t("chatPlaceholder")}
                       disabled={sendingChat}
                     />
-                    <Button type="submit" size="sm" disabled={!canSendChat}>
+                    <Button type="submit" disabled={!canSendChat}>
                       {t("chatSend")}
                     </Button>
                   </form>
@@ -927,7 +928,6 @@ export function WaitingRoom({
                     <Button
                       type="button"
                       variant={feedbackVisible ? "ghost" : "danger"}
-                      size="sm"
                       onClick={() => {
                         setFeedbackVisible((prev) => !prev);
                         setFeedbackError(null);

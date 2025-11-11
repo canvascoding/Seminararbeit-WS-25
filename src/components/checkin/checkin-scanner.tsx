@@ -55,7 +55,7 @@ export function CheckInScanner({
           ? `/slots/${venueId}`
           : `/waiting-room?${new URLSearchParams({ venue: venueId }).toString()}`;
       navigatingRef.current = true;
-      router.push(target);
+      router.push(target as any);
     },
     [router],
   );

@@ -26,7 +26,7 @@ export function AuthGuard({ children, redirectTo = "/" }: AuthGuardProps) {
     if (!firebaseUser) {
       // Kurze Verzögerung, damit der Nutzer die Info-Nachricht sehen kann
       const timer = setTimeout(() => {
-        router.push(redirectTo);
+        router.push(redirectTo as any);
       }, 2000);
       return () => clearTimeout(timer);
     }

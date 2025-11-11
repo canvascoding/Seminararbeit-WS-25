@@ -37,7 +37,7 @@ export default async function VenueSlotsPage({ params }: Props) {
               <p className="text-loop-slate/70">{t("subtitle")}</p>
             </div>
             <Button asChild className="sm:self-start">
-              <Link href={waitingRoomLink}>
+              <Link href={waitingRoomLink as any}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("createLoopButton")}
               </Link>

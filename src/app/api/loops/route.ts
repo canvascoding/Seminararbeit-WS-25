@@ -195,7 +195,7 @@ export async function GET(request: Request) {
   if (useMock) {
     const loops = mockLoops
       .map((loop) =>
-        serializeLoop(loop, { roomId: loop.roomId, ownerId: loop.ownerId }, userId),
+        serializeLoop(loop, { roomId: loop.roomId ?? undefined, ownerId: loop.ownerId ?? undefined }, userId),
       )
       .filter((loop): loop is LoopSummary => Boolean(loop))
       .filter((loop) =>

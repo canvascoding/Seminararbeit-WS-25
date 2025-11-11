@@ -359,14 +359,13 @@ export function LoopCenter() {
 
                 <div className="flex flex-wrap gap-2">
                   {loop.isOwner && (
-                    <Button asChild variant="secondary" size="sm">
-                      <Link href={waitingRoomUrl}>{t("openWaitingRoom")}</Link>
+                    <Button asChild variant="secondary">
+                      <Link href={waitingRoomUrl as any}>{t("openWaitingRoom")}</Link>
                     </Button>
                   )}
                   {loop.isOwner && loop.status !== "completed" && (
                     <Button
                       variant={showFeedbackForm ? "ghost" : "danger"}
-                      size="sm"
                       onClick={() => {
                         if (showFeedbackForm) {
                           resetFeedbackState();
