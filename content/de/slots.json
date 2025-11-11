@@ -1,6 +1,7 @@
 {
   "title": "Slots am Campus",
   "subtitle": "Gefiltert nach Intent und Startzeit. Aktualisiert sich automatisch.",
+  "createLoopButton": "Loop erstellen",
   "filterIntent": "Intent",
   "filterStart": "Startzeit",
   "groupNow": "Jetzt",

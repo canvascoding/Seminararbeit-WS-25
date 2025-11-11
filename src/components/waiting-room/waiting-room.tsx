@@ -558,71 +558,73 @@ export function WaitingRoom({
 
       <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
         <Card>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
             <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
               {t("participantsHeadline")}
             </h3>
-            <Badge tone="neutral">
+            <Badge tone="neutral" className="shrink-0">
               {waiting.length} / {capacity}
             </Badge>
           </div>
-          <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {waiting.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
+              <p className="rounded-xl sm:rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
                 {t("emptyWaiting")}
               </p>
             )}
             {waiting.map((participant) => (
               <div
                 key={participant.userId}
-                className="flex items-center justify-between gap-2 rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-3 sm:px-4 py-2"
+                className="flex items-center justify-between gap-2 rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2"
               >
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 overflow-hidden">
                   <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
                     {participant.alias}
                   </p>
-                  <p className="text-xs text-loop-slate/50">
+                  <p className="text-xs text-loop-slate/50 truncate">
                     {t("joinedAt", {
                       time: formatTimeDisplay(participant.joinedAt),
                     })}
                   </p>
                 </div>
-                <Badge tone="success" className="shrink-0">{t("statusChipWaiting")}</Badge>
+                <Badge tone="success" className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
+                  {t("statusChipWaiting")}
+                </Badge>
               </div>
             ))}
           </div>
         </Card>
 
         <Card>
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 mb-3 sm:mb-4">
             <h3 className="text-base sm:text-lg font-semibold text-loop-slate">
               {t("loopsHeadline")}
             </h3>
-            <Badge tone="success">{loops.length}</Badge>
+            <Badge tone="success" className="shrink-0">{loops.length}</Badge>
           </div>
-          <div className="mt-3 sm:mt-4 space-y-2 sm:space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {loops.length === 0 && (
-              <p className="rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
+              <p className="rounded-xl sm:rounded-2xl border border-dashed border-loop-slate/20 px-3 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-loop-slate/70">
                 {t("emptyLoops")}
               </p>
             )}
             {loops.map((loop) => (
               <div
                 key={loop.id}
-                className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-3 sm:px-4 py-2 sm:py-3"
+                className="rounded-xl sm:rounded-2xl border border-white/60 bg-white/80 px-2.5 sm:px-4 py-2 sm:py-3"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <p className="text-xs sm:text-sm font-semibold text-loop-slate truncate min-w-0">
                     {t("loopLabel", { id: loop.id })}
                   </p>
-                  <Badge tone={loop.status === "inProgress" ? "success" : "neutral"} className="shrink-0 text-xs">
+                  <Badge tone={loop.status === "inProgress" ? "success" : "neutral"} className="shrink-0 text-[10px] sm:text-xs px-2 py-0.5">
                     {loop.status === "inProgress"
                       ? t("loopStatusActive")
                       : t("loopStatusCompleted")}
                   </Badge>
                 </div>
                 {loop.meetingPoint?.label && (
-                  <p className="mt-1 text-xs sm:text-sm text-loop-slate/80">
+                  <p className="mt-1 text-xs sm:text-sm text-loop-slate/80 break-words">
                     {t("loopMeetingPoint")}: {loop.meetingPoint.label}
                     {loop.meetingPoint.description
                       ? ` · ${loop.meetingPoint.description}`
@@ -630,21 +632,21 @@ export function WaitingRoom({
                   </p>
                 )}
                 {loop.scheduledAt && (
-                  <p className="text-xs text-loop-slate/60">
+                  <p className="text-xs text-loop-slate/60 break-words">
                     {t("loopScheduledAt", {
                       time: formatDateDisplay(loop.scheduledAt),
                     })}
                   </p>
                 )}
                 {loop.startedAt && (
-                  <p className="text-xs text-loop-slate/60">
+                  <p className="text-xs text-loop-slate/60 break-words">
                     {t("loopStartedAt", {
                       time: formatDateDisplay(loop.startedAt),
                     })}
                   </p>
                 )}
                 {loop.durationMinutes && loop.status === "completed" && (
-                  <p className="text-xs text-loop-slate/60">
+                  <p className="text-xs text-loop-slate/60 break-words">
                     {t("loopDuration", { minutes: loop.durationMinutes })}
                     {loop.autoClosed && (
                       <span className="ml-1">· {t("loopAutoClosed")}</span>

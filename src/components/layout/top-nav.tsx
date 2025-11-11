@@ -148,21 +148,21 @@ export function TopNav() {
   ];
 
   return (
-    <header className="sticky top-0 z-30 backdrop-blur bg-loop-sand/90 border-b border-white/60">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-        <div className="flex items-center gap-2 sm:gap-3">
+    <header className="sticky top-0 z-30 backdrop-blur bg-loop-sand/90 border-b border-white/60 overflow-x-hidden">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 sm:gap-3 px-4 py-3 overflow-x-hidden">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden rounded-lg p-2 hover:bg-loop-green/10 focus:outline-none focus:ring-2 focus:ring-loop-green"
+            className="md:hidden rounded-lg p-2 hover:bg-loop-green/10 focus:outline-none focus:ring-2 focus:ring-loop-green flex-shrink-0"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5 text-loop-slate" />
           </button>
-          <Link href="/" className="flex items-center gap-1.5 sm:gap-2">
+          <Link href="/" className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-loop-green px-2 py-0.5 text-[10px] text-white font-medium uppercase tracking-wider">
               {t("pilotBadge")}
             </span>
-            <span className="font-semibold text-base sm:text-lg text-loop-slate">Loop</span>
+            <span className="font-semibold text-base sm:text-lg text-loop-slate whitespace-nowrap">Loop</span>
           </Link>
         </div>
 
@@ -183,25 +183,25 @@ export function TopNav() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-shrink">
           <Link
             href="/checkin"
-            className="inline-flex items-center gap-1.5 rounded-full border border-loop-slate/40 px-3 py-1 text-xs text-loop-slate transition-colors hover:border-loop-green hover:text-loop-green sm:text-sm max-w-[120px] sm:max-w-[180px] min-w-0"
+            className="inline-flex items-center gap-1 rounded-full border border-loop-slate/40 px-2 sm:px-3 py-1 text-xs text-loop-slate transition-colors hover:border-loop-green hover:text-loop-green sm:text-sm max-w-[100px] sm:max-w-[180px] min-w-0"
             aria-label={venueAriaLabel}
             title={venueAriaLabel}
           >
             <MapPin className="h-3.5 w-3.5 text-loop-green flex-shrink-0" />
             <span className="truncate min-w-0 block">{venueLabel}</span>
           </Link>
-          <Button variant="ghost" asChild className="hidden sm:inline-flex">
+          <Button variant="ghost" asChild className="hidden sm:inline-flex flex-shrink-0">
             <Link href="/report">{t("ctaReport")}</Link>
           </Button>
           <Button
             variant="primary"
             asChild
-            className="text-xs sm:text-sm px-3 py-2 sm:px-4 sm:py-2 min-w-0"
+            className="text-xs sm:text-sm px-2 sm:px-4 py-2 min-w-0 flex-shrink-0"
           >
-            <Link href={startPath} className="flex items-center gap-1.5">
+            <Link href={startPath} className="flex items-center gap-1 sm:gap-1.5">
               {profile ? (
                 <>
                   <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-current" />
@@ -210,7 +210,7 @@ export function TopNav() {
               ) : (
                 <>
                   <LogIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                  <span>Login</span>
+                  <span className="whitespace-nowrap">Login</span>
                 </>
               )}
             </Link>
