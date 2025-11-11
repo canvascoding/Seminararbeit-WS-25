@@ -4,14 +4,52 @@ export type IntentKey =
   | "walkTalk"
   | "coffeeBreak";
 
+export type VenueCategory = "mensa" | "library" | "campus" | "other";
+export type VenueStatus = "draft" | "active" | "paused";
+
+export interface VenueContact {
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface VenuePhoto {
+  id: string;
+  url: string;
+  caption?: string;
+}
+
+export interface VenueMeetPoint {
+  id: string;
+  label: string;
+  description: string;
+  floor?: string;
+  instructions?: string;
+  capacityHint?: number;
+  geoOffset?: { lat: number; lng: number };
+}
+
 export interface Venue {
   id: string;
   name: string;
+  type?: VenueCategory;
   address: string;
+  postalCode?: string;
+  city?: string;
+  googlePlaceId?: string;
   geo: { lat: number; lng: number };
+  area?: string;
   partnerId: string;
-  meetPoints: { id: string; label: string; description: string }[];
+  status?: VenueStatus;
+  capacity?: number;
+  defaultIntents?: IntentKey[];
+  meetPoints: VenueMeetPoint[];
   tips?: string[];
+  checkInHints?: string[];
+  contact?: VenueContact;
+  photos?: VenuePhoto[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Slot {

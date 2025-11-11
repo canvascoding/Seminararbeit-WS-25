@@ -9,6 +9,7 @@ export default getRequestConfig(async () => {
     partner: (await import("../../content/de/partner.json")).default,
     safety: (await import("../../content/de/safety.json")).default,
     waitingRoom: (await import("../../content/de/waiting-room.json")).default,
+    venues: (await import("../../content/de/venues.json")).default,
   };
 
   return {

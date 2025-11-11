@@ -147,6 +147,12 @@
 ### 6.5 Safety & Reporting Drawer
 - Black background modal with white text to signal seriousness; CTA buttons invert (white background, black text) for immediate clarity.
 - Include escalation steps (Mute, Report, SOS) each with icon + single-line description.
+#### Ablauf beim CTA „Meldung senden“
+1. **Client-Validierung & Kontext sammeln:** Vor dem Absenden prüft die Drawer-UI, ob mindestens eine Kategorie (Belästigung, Spam, Unsicherheit, Sonstiges) gewählt und – falls „Sonstiges“ – ein kurzer Freitext eingetragen wurde. Zusätzlich fügt der Client automatisch `loopId`, `slotId`, `reportedUserIds` (falls angegeben) sowie device-Timestamp hinzu.
+2. **API-Call an `submitIncident`:** Die CTA-Interaktion zeigt sofort einen progress state („Sende Meldung…“), deaktiviert weitere Buttons und sendet eine signierte Anfrage über Firebase Functions. Payload: Kontextfelder aus Schritt 1 plus `isEmergency` (boolean) und optionaler Medien-Link, falls bereits ein Screenshot hinzugefügt wurde.
+3. **Persistenz & Routing:** Die Function legt ein Dokument `incidents/{incidentId}` an, stößt eine Slack/Webhook-Notification an den Safety-Kanal an und markiert beteiligte Nutzer:innen mit `isMuted: true` (30 Min Sperre). Für als kritisch markierte Meldungen wird zusätzlich ein PagerDuty-Event ausgelöst.
+4. **UI-Bestätigung & Guidance:** Bei Erfolg blenden wir eine Bestätigung („Danke, unser Safety-Team ist dran“) ein, listen die nächsten Schritte (z. B. Notruf 110 bei Gefahr) und bieten optional den CTA „Mute für 24 h anfordern“. Drawer schließt erst nach Nutzerbestätigung, damit sie die Hinweise lesen können.
+5. **Fehlerbehandlung & Retry:** Falls der Function-Call scheitert (Timeout, Offline), zeigt die UI einen roten Alert mit klarer Anleitung („WLAN prüfen oder Loop-Team per E-Mail kontaktieren“) und hält die eingegebenen Felder gecached, damit ein erneuter Versuch ohne Datenverlust erfolgen kann.
 
 ## 7. Motion & Microinteractions
 - Use **150 ms** ease-out fades for button presses; 250 ms spring-in for card reveals.

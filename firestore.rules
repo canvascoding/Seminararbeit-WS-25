@@ -20,6 +20,10 @@ service cloud.firestore {
       return isEmailVerified() && request.auth.token != null && request.auth.token.role == "partner";
     }
 
+    function isAdmin() {
+      return isEmailVerified() && request.auth.token != null && request.auth.token.role == "admin";
+    }
+
     //
     // users/{uid}
     //
@@ -47,11 +51,29 @@ service cloud.firestore {
     }
 
     //
-    // venues – public read, no client writes (nur Admin/Functions)
+    // venues – public read, Admin-CRUD
     //
     match /venues/{venueId} {
       allow read: if true;
-      allow write: if false;
+
+      allow create, update: if isAdmin() &&
+        request.resource.data.keys().hasAll([
+          "name",
+          "address",
+          "postalCode",
+          "city",
+          "googlePlaceId",
+          "geo",
+          "partnerId",
+          "status",
+          "meetPoints"
+        ]) &&
+        request.resource.data.geo.lat is number &&
+        request.resource.data.geo.lng is number &&
+        request.resource.data.meetPoints is list &&
+        request.resource.data.meetPoints.size() > 0;
+
+      allow delete: if false;
     }
 
     //

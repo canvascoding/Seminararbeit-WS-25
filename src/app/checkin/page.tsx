@@ -27,16 +27,27 @@ export default async function CheckInPage({ searchParams }: Props) {
             <div>
               <h1 className="text-2xl sm:text-3xl font-semibold text-loop-slate">{t("title")}</h1>
               <div className="mt-4 sm:mt-6">
-                <CheckInScanner initialVenueId={activeVenue?.id ?? undefined} />
+                <CheckInScanner venues={venues} initialVenueId={activeVenue?.id ?? undefined} />
               </div>
             </div>
             <div className="space-y-3 sm:space-y-4">
               {activeVenue ? (
                 <Card>
-                  <Badge tone="success" className="mb-2 w-fit">
-                    {activeVenue.name}
-                  </Badge>
-                  <p className="text-xs sm:text-sm text-loop-slate/70">{activeVenue.address}</p>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <Badge tone="success" className="mb-2 w-fit">
+                        {activeVenue.name}
+                      </Badge>
+                      <p className="text-xs sm:text-sm text-loop-slate/70">{activeVenue.address}</p>
+                    </div>
+                    <Link
+                      href="/checkin"
+                      className="text-xs sm:text-sm text-loop-green underline inline-flex items-center gap-1"
+                    >
+                      <span aria-hidden>←</span>
+                      {t("listLink")}
+                    </Link>
+                  </div>
                   <ul className="mt-3 sm:mt-4 space-y-2 text-xs sm:text-sm text-loop-slate">
                     {activeVenue.meetPoints.map((point) => (
                       <li key={point.id}>

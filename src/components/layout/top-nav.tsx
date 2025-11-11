@@ -4,13 +4,13 @@ import type { Route } from "next";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
-import { Menu, LogIn, Play } from "lucide-react";
+import { Menu, LogIn, Play, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/providers/auth-provider";
 
-type NavKey = "navCheckIn" | "navSlots" | "navPartner" | "navReport";
+type NavKey = "navCheckIn" | "navSlots" | "navVenues" | "navPartner" | "navReport";
 type LinkHref = Parameters<typeof Link>[0]["href"];
 
 interface NavLink {
@@ -21,6 +21,10 @@ interface NavLink {
 }
 
 const DEFAULT_VENUE_ID = "mensa-nord";
+type VenueChangeDetail = {
+  venueId?: string;
+  venueName?: string;
+};
 
 export function TopNav() {
   const t = useTranslations("common");
@@ -28,25 +32,64 @@ export function TopNav() {
   const { profile, mockMode } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentVenueId, setCurrentVenueId] = useState<string>(DEFAULT_VENUE_ID);
+  const [currentVenueName, setCurrentVenueName] = useState<string | null>(null);
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
 
   // Read the checked-in venue from sessionStorage on mount
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!profile) {
+      setCurrentVenueId(DEFAULT_VENUE_ID);
+      setCurrentVenueName(null);
+      setIsCheckedIn(false);
+      return;
+    }
+
     const storedVenue = window.sessionStorage.getItem("checkedInVenue");
+    const storedVenueName = window.sessionStorage.getItem("checkedInVenueName");
     if (storedVenue) {
       setCurrentVenueId(storedVenue);
+      setIsCheckedIn(true);
+    } else {
+      setIsCheckedIn(false);
     }
-  }, []);
+    if (storedVenueName) setCurrentVenueName(storedVenueName);
+
+    function handleVenueChange(event: Event) {
+      const detail = (event as CustomEvent<VenueChangeDetail>).detail ?? {};
+      if (detail.venueId) {
+        setCurrentVenueId(detail.venueId);
+        setCurrentVenueName(detail.venueName ?? null);
+        setIsCheckedIn(true);
+      } else {
+        setCurrentVenueId(DEFAULT_VENUE_ID);
+        setCurrentVenueName(null);
+        setIsCheckedIn(false);
+      }
+    }
+
+    window.addEventListener("checkedInVenueChanged" as any, handleVenueChange as EventListener);
+    return () => {
+      window.removeEventListener("checkedInVenueChanged" as any, handleVenueChange as EventListener);
+    };
+  }, [profile]);
 
   const slotPath = `/slots/${currentVenueId}` as Route;
+  const venueLabel = currentVenueName ?? t("navVenueUnknown");
+  const venueAriaLabel = currentVenueName
+    ? t("navVenueActive", { venue: currentVenueName })
+    : t("navVenueUnknown");
 
+  const shouldShowCheckInLink = !profile || !isCheckedIn;
   const links: NavLink[] = [
-    { id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" },
+    ...(shouldShowCheckInLink ? [{ id: "checkin", href: "/checkin", activePath: "/checkin", labelKey: "navCheckIn" }] : []),
     {
       id: "slots",
       href: slotPath,
       activePath: slotPath,
       labelKey: "navSlots",
     },
+    { id: "venues", href: "/venues", activePath: "/venues", labelKey: "navVenues" },
     { id: "partner", href: "/partner", activePath: "/partner", labelKey: "navPartner" },
     { id: "report", href: "/report", activePath: "/report", labelKey: "navReport" },
   ];
@@ -86,6 +129,15 @@ export function TopNav() {
         </nav>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          <Link
+            href="/checkin"
+            className="inline-flex items-center gap-1.5 rounded-full border border-loop-slate/40 px-3 py-1 text-xs text-loop-slate transition-colors hover:border-loop-green hover:text-loop-green sm:text-sm"
+            aria-label={venueAriaLabel}
+            title={venueAriaLabel}
+          >
+            <MapPin className="h-3.5 w-3.5 text-loop-green" />
+            <span className="whitespace-nowrap">{venueLabel}</span>
+          </Link>
           <Button variant="ghost" asChild className="hidden sm:inline-flex">
             <Link href="/report">{t("ctaReport")}</Link>
           </Button>

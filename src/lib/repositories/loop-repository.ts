@@ -1,14 +1,27 @@
 import { addMinutes, isAfter } from "date-fns";
 import { mockLoops, mockPartnerMetrics, mockSlots, mockVenues } from "@/data/mock-data";
-import type { IncidentReport, Loop, Slot, UserProfile, Venue } from "@/types/domain";
+import type {
+  IncidentReport,
+  Loop,
+  Slot,
+  UserProfile,
+  Venue,
+} from "@/types/domain";
 import { getAdminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import type { Query, Timestamp } from "firebase-admin/firestore";
 
-const useMock = !isFirebaseAdminConfigured;
+const forceMock =
+  process.env.NEXT_PUBLIC_FORCE_MOCK === "true" ||
+  process.env.FORCE_MOCK_DATA === "true";
+
+const useMock = forceMock || !isFirebaseAdminConfigured;
 
 type FirestoreDate = Timestamp | Date | string;
-type PartnerSlotPayload = Omit<Slot, "id" | "status"> &
+export type PartnerSlotPayload = Omit<Slot, "id" | "status"> &
   Partial<Pick<Slot, "status">>;
+export type VenueInput = Omit<Venue, "id" | "createdAt" | "updatedAt"> & {
+  id?: string;
+};
 
 function serializeDate(value: FirestoreDate) {
   if (!value) return new Date().toISOString();
@@ -54,10 +67,23 @@ export async function listSlots(venueId?: string, fromDate?: Date): Promise<Slot
 
   const db = getAdminDb();
   let slotQuery: Query = db.collection("slots");
-  if (venueId) slotQuery = slotQuery.where("venueId", "==", venueId);
-  if (fromDate) slotQuery = slotQuery.where("startAt", ">=", fromDate);
-  const snapshot = await slotQuery.orderBy("startAt", "asc").get();
-  return snapshot.docs.map((doc) => {
+  let requiresLocalDateFilter = false;
+  let requiresLocalOrdering = false;
+
+  if (venueId) {
+    slotQuery = slotQuery.where("venueId", "==", venueId);
+    requiresLocalOrdering = true;
+    if (fromDate) {
+      // Combining equality + inequality requires a composite index, so filter locally instead.
+      requiresLocalDateFilter = true;
+    }
+  } else {
+    if (fromDate) slotQuery = slotQuery.where("startAt", ">=", fromDate);
+    slotQuery = slotQuery.orderBy("startAt", "asc");
+  }
+
+  const snapshot = await slotQuery.get();
+  let slots = snapshot.docs.map((doc) => {
     const data = doc.data() as Slot & { startAt: FirestoreDate };
     return {
       ...data,
@@ -65,6 +91,18 @@ export async function listSlots(venueId?: string, fromDate?: Date): Promise<Slot
       startAt: serializeDate(data.startAt),
     };
   });
+
+  if (requiresLocalDateFilter && fromDate) {
+    slots = slots.filter((slot) => isAfter(new Date(slot.startAt), fromDate));
+  }
+  if (requiresLocalOrdering) {
+    slots = slots.sort(
+      (a, b) =>
+        new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+    );
+  }
+
+  return slots;
 }
 
 export async function joinSlot(slotId: string, user: UserProfile) {
@@ -202,4 +240,82 @@ export function deriveMatchTimeout(slot: Slot) {
   return addMinutes(new Date(slot.startAt), 2);
 }
 
-export type { PartnerSlotPayload };
+function pruneUndefined<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, v]) => v !== undefined),
+  ) as T;
+}
+
+export async function createVenue(payload: VenueInput): Promise<Venue> {
+  const timestamp = new Date().toISOString();
+  if (useMock) {
+    const newVenue: Venue = {
+      id: payload.id ?? `venue-${Date.now()}`,
+      defaultIntents: [],
+      status: "draft",
+      meetPoints: payload.meetPoints ?? [],
+      ...payload,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    mockVenues.push(newVenue);
+    return newVenue;
+  }
+
+  const db = getAdminDb();
+  const data = pruneUndefined({
+    ...payload,
+    status: payload.status ?? "draft",
+    defaultIntents: payload.defaultIntents ?? [],
+    meetPoints: payload.meetPoints ?? [],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+
+  if (payload.id) {
+    await db.collection("venues").doc(payload.id).set(data);
+    return {
+      id: payload.id,
+      ...(data as Omit<Venue, "id">),
+    };
+  }
+
+  const ref = await db.collection("venues").add(data);
+  const doc = await ref.get();
+  return {
+    id: ref.id,
+    ...(doc.data() as Venue),
+  };
+}
+
+export async function updateVenue(
+  id: string,
+  payload: Partial<Venue>,
+): Promise<Venue> {
+  const timestamp = new Date().toISOString();
+  if (useMock) {
+    const index = mockVenues.findIndex((venue) => venue.id === id);
+    if (index === -1) {
+      throw new Error("Venue not found");
+    }
+    const updated: Venue = {
+      ...mockVenues[index],
+      ...payload,
+      updatedAt: timestamp,
+    };
+    mockVenues[index] = updated;
+    return updated;
+  }
+
+  const db = getAdminDb();
+  const data = pruneUndefined({
+    ...payload,
+    updatedAt: timestamp,
+  });
+  await db.collection("venues").doc(id).set(data, { merge: true });
+  const doc = await db.collection("venues").doc(id).get();
+  return {
+    id,
+    ...(doc.data() as Venue),
+  };
+}

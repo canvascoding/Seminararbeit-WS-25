@@ -42,7 +42,7 @@ export function WaitingRoom({
   venueId,
   defaultCapacity,
 }: WaitingRoomProps) {
-  const t = useTranslations("waiting-room");
+  const t = useTranslations("waitingRoom");
   const [displayName, setDisplayName] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
@@ -157,20 +157,26 @@ export function WaitingRoom({
     setTimeout(() => setCopied(false), 1_500);
   }
 
-  const myStatus = useMemo(() => {
-    if (!userId || !data) return "idle";
-    if (data.waiting.some((attendee) => attendee.userId === userId)) {
-      return "waiting";
-    }
-    const matchedLoop = data.loops.find((loop) =>
-      loop.participantIds.includes(userId),
+  const matchedLoop = useMemo(() => {
+    if (!userId || !data) return null;
+    return (
+      data.loops.find((loop) => loop.participantIds.includes(userId)) ?? null
     );
-    if (matchedLoop) return matchedLoop.id;
-    return "idle";
   }, [data, userId]);
+
+  const isWaiting =
+    !!userId && !!data?.waiting?.some((attendee) => attendee.userId === userId);
 
   const waiting = data?.waiting ?? [];
   const loops = data?.loops ?? [];
+  const lastUpdatedLabel = useMemo(() => {
+    if (!data?.lastUpdated) return null;
+    return new Date(data.lastUpdated).toLocaleTimeString("de-DE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }, [data?.lastUpdated]);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -258,15 +264,40 @@ export function WaitingRoom({
           </p>
         )}
         <p className="text-sm text-loop-slate/70">
-          {myStatus === "waiting"
-            ? t("statusWaiting")
-            : myStatus === "idle"
-              ? t("statusIdle")
-              : t("statusMatched", { loopId: myStatus })}
+          {matchedLoop
+            ? t("statusMatched", { loopId: matchedLoop.id })
+            : isWaiting
+              ? t("statusWaiting")
+              : t("statusIdle")}
         </p>
-        {isFetching && (
+        {matchedLoop && (
+          <div className="rounded-2xl border border-loop-green/30 bg-loop-green/5 px-4 py-3 text-sm text-loop-slate">
+            <p className="font-semibold">
+              {t("matchedHeadline", { loopId: matchedLoop.id })}
+            </p>
+            <p className="mt-1 text-loop-slate/70">
+              {t("matchedDescription")}
+            </p>
+            <p className="mt-3 text-xs uppercase tracking-wide text-loop-slate/60">
+              {t("matchedParticipantsHeadline")}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {matchedLoop.participants.map((participant) => (
+                <Badge
+                  key={participant.userId}
+                  tone={participant.userId === userId ? "success" : "neutral"}
+                >
+                  {participant.userId === userId
+                    ? t("matchedParticipantsYou", { name: participant.alias })
+                    : participant.alias}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+        {isFetching && lastUpdatedLabel && (
           <p className="text-xs text-loop-slate/50">
-            {t("updating", { time: new Date().toLocaleTimeString("de-DE") })}
+            {t("updating", { time: lastUpdatedLabel })}
           </p>
         )}
       </Card>
