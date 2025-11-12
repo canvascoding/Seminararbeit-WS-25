@@ -4,8 +4,6 @@ import { getAdminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 
 const LOOP_AUTO_CLOSE_MS = 2 * 60 * 60 * 1000;
 const MAX_LOOP_HISTORY = 12;
-const MIN_PARTICIPANTS = 2;
-
 const forceMock =
   process.env.NEXT_PUBLIC_FORCE_MOCK === "true" ||
   process.env.FORCE_MOCK_DATA === "true";
@@ -23,6 +21,13 @@ interface WaitingParticipant {
   alias: string;
   joinedAt: string;
   email?: string | null;
+  location?: ParticipantLocation | null;
+}
+
+interface ParticipantLocation {
+  lat: number;
+  lng: number;
+  updatedAt: string;
 }
 
 interface RoomChatMessage {
@@ -85,6 +90,7 @@ interface RoomState {
   createdAt: string;
   updatedAt: string;
   capacityConfirmed?: boolean;
+  locations: Record<string, ParticipantLocation>;
 }
 
 const rooms = new Map<string, RoomState>();
@@ -117,6 +123,7 @@ function createEmptyRoom(roomId: string): RoomState {
     createdAt: timestamp,
     updatedAt: timestamp,
     capacityConfirmed: false,
+    locations: {},
   };
 }
 
@@ -138,6 +145,7 @@ function normalizeRoom(roomId: string, source?: Partial<RoomState>): RoomState {
     createdAt: source?.createdAt ?? base.createdAt,
     updatedAt: source?.updatedAt ?? base.updatedAt,
     capacityConfirmed: source?.capacityConfirmed ?? base.capacityConfirmed,
+    locations: source?.locations ?? base.locations,
   };
 }
 
@@ -149,6 +157,136 @@ function updateParticipantIndex(room: RoomState) {
     });
   });
   room.participantIndex = Array.from(ids);
+}
+
+function getParticipantProfile(room: RoomState, userId: string) {
+  return room.profiles[userId] ?? { name: userId, email: null };
+}
+
+function toParticipant(
+  room: RoomState,
+  userId: string,
+  joinedAt?: string,
+): WaitingParticipant {
+  const profile = getParticipantProfile(room, userId);
+  return {
+    userId,
+    alias: profile.name,
+    email: profile.email ?? null,
+    joinedAt: joinedAt ?? nowIso(),
+    location: room.locations[userId] ?? null,
+  };
+}
+
+function findActiveLoop(room: RoomState) {
+  return room.loops.find((loop) => loop.status === "active") ?? null;
+}
+
+function loopContainsUser(
+  loop: {
+    participantIds?: unknown;
+    ownerId?: string | null;
+    id?: string;
+    status?: LoopPhase;
+    participants?: { userId?: string }[];
+  },
+  room: Pick<RoomState, "ownerId">,
+  userId: string,
+) {
+  if (loop.ownerId === userId || room.ownerId === userId) {
+    return true;
+  }
+  if (
+    Array.isArray(loop.participantIds) &&
+    (loop.participantIds as string[]).includes(userId)
+  ) {
+    return true;
+  }
+  if (Array.isArray(loop.participants)) {
+    return loop.participants.some((participant) => participant?.userId === userId);
+  }
+  return false;
+}
+
+async function hasActiveLoop(
+  userId: string,
+  options?: { roomId?: string; allowLoopId?: string },
+) {
+  if (!userId) return false;
+  if (useMock) {
+    for (const [existingRoomId, existingRoom] of rooms.entries()) {
+      const loops = Array.isArray(existingRoom.loops) ? existingRoom.loops : [];
+      for (const loop of loops) {
+        if (loop.status !== "active") continue;
+        if (!loopContainsUser(loop, existingRoom, userId)) continue;
+        if (
+          options?.roomId === existingRoomId &&
+          options?.allowLoopId &&
+          options.allowLoopId === loop.id
+        ) {
+          continue;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const db = getAdminDb();
+  const [ownerSnapshot, participantSnapshot] = await Promise.all([
+    db.collection("waitingRooms").where("ownerId", "==", userId).get(),
+    db.collection("waitingRooms").where("participantIndex", "array-contains", userId).get(),
+  ]);
+  const roomDocs = new Map<string, Record<string, unknown>>();
+  ownerSnapshot.docs.forEach((doc) => roomDocs.set(doc.id, doc.data()));
+  participantSnapshot.docs.forEach((doc) => roomDocs.set(doc.id, doc.data()));
+
+  for (const [docId, roomData] of roomDocs.entries()) {
+    const loops = Array.isArray(roomData.loops) ? roomData.loops : [];
+    for (const loopData of loops) {
+      if (loopData?.status !== "active") continue;
+      const loopId = typeof loopData?.id === "string" ? loopData.id : null;
+      if (
+        options?.roomId === docId &&
+        options?.allowLoopId &&
+        options.allowLoopId === loopId
+      ) {
+        continue;
+      }
+      const participantsRaw = Array.isArray(loopData?.participants)
+        ? (loopData.participants as unknown[])
+        : [];
+      const normalizedParticipants = participantsRaw.map((participant) =>
+        typeof participant === "string" ? { userId: participant } : participant,
+      );
+      const containsUser = loopContainsUser(
+        {
+          id: loopId ?? "",
+          status: loopData?.status,
+          ownerId:
+            typeof loopData?.ownerId === "string"
+              ? (loopData.ownerId as string)
+              : undefined,
+          participantIds: Array.isArray(loopData?.participantIds)
+            ? (loopData.participantIds as string[])
+            : [],
+          participants: normalizedParticipants as { userId?: string }[],
+        },
+        {
+          ownerId:
+            typeof roomData.ownerId === "string"
+              ? (roomData.ownerId as string)
+              : undefined,
+        },
+        userId,
+      );
+      if (containsUser) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 async function loadRoom(roomId: string): Promise<RoomState> {
@@ -206,6 +344,7 @@ function buildSnapshot(room: RoomState) {
       joinedAt: attendee.joinedAt,
       alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
       email: room.profiles[attendee.userId]?.email ?? null,
+      location: room.locations[attendee.userId] ?? null,
     })),
     loops: room.loops.slice(0, MAX_LOOP_HISTORY),
     lastUpdated: nowIso(),
@@ -309,6 +448,8 @@ function ensureWaitingLoop(room: RoomState) {
     existing.meetingPoint = room.meetingPoint;
     existing.scheduledAt = room.scheduledAt;
     existing.messages = existing.messages ?? [];
+    existing.participants = existing.participants ?? [];
+    existing.participantIds = existing.participantIds ?? [];
     return existing;
   }
   const loop: RoomLoop = {
@@ -416,25 +557,36 @@ export async function POST(request: Request) {
             "userId und displayName erforderlich",
           );
         }
-        if (!isRoomSetupComplete(room)) {
+        const activeLoop = findActiveLoop(room);
+        if (!activeLoop) {
           throw new HttpError(
             400,
-            "Der Warteraum ist noch nicht vorbereitet. Bitte zuerst Treffpunkt, Startzeit und Kapazität festlegen.",
+            "Dieses Loop wurde noch nicht gestartet.",
           );
         }
-        room.attendees = room.attendees.filter(
-          (attendee) => attendee.userId !== userId,
-        );
-        room.attendees.push({
-          slotId: roomId,
-          userId,
-          joinedAt: nowIso(),
-          status: "pending",
+        if (activeLoop.participantIds.includes(userId)) {
+          throw new HttpError(400, "Du bist bereits Teil dieses Loops.");
+        }
+        const hasLoopElsewhere = await hasActiveLoop(userId, {
+          roomId,
+          allowLoopId: activeLoop.id,
         });
+        if (hasLoopElsewhere) {
+          throw new HttpError(
+            400,
+            "Es ist nur ein aktives Loop pro Person erlaubt.",
+          );
+        }
+        if (activeLoop.participants.length >= room.capacity) {
+          throw new HttpError(400, "Dieses Loop ist bereits voll.");
+        }
         room.profiles[userId] = {
           name: displayName,
           email: email ?? room.profiles[userId]?.email ?? null,
         };
+        const participant = toParticipant(room, userId);
+        activeLoop.participants = [...activeLoop.participants, participant];
+        activeLoop.participantIds = [...activeLoop.participantIds, userId];
         break;
       }
       case "leave": {
@@ -447,6 +599,17 @@ export async function POST(request: Request) {
       }
       case "reset": {
         ensureOwner(room, userId, ownerName);
+        const activeLoop = findActiveLoop(room);
+        const otherParticipants =
+          activeLoop?.participantIds.some(
+            (participantId) => participantId && participantId !== room.ownerId,
+          ) ?? false;
+        if (otherParticipants) {
+          throw new HttpError(
+            400,
+            "Solange andere Teilnehmende aktiv sind, kann der Raum nicht zurückgesetzt werden.",
+          );
+        }
         room.attendees = [];
         room.meetingPoint = null;
         room.scheduledAt = nowIso();
@@ -510,41 +673,44 @@ export async function POST(request: Request) {
             "Bitte Setup abschließen, bevor ein Loop gestartet wird.",
           );
         }
-        const queue = [...room.attendees].sort(
-          (a, b) =>
-            new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
-        );
-        if (queue.length < MIN_PARTICIPANTS) {
+        if (findActiveLoop(room)) {
+          throw new HttpError(400, "Dieses Loop läuft bereits.");
+        }
+        if (!room.ownerId) {
+          throw new HttpError(400, "Kein Host hinterlegt.");
+        }
+        const loop = ensureWaitingLoop(room);
+        const ownerHasActiveLoop = await hasActiveLoop(room.ownerId, {
+          roomId,
+          allowLoopId: loop.id,
+        });
+        if (ownerHasActiveLoop) {
           throw new HttpError(
             400,
-            "Mindestens zwei Personen notwendig, um ein Loop zu starten.",
+            "Du hast bereits ein aktives Loop. Bitte beende es zuerst.",
           );
         }
-        const maxParticipants = Math.min(room.capacity, queue.length);
-        const selected = queue.slice(0, maxParticipants);
-        const selectedIds = new Set(selected.map((entry) => entry.userId));
-        room.attendees = room.attendees.filter(
-          (attendee) => !selectedIds.has(attendee.userId),
-        );
         const timestamp = nowIso();
-        const participants = selected.map<WaitingParticipant>((attendee) => ({
-          userId: attendee.userId,
-          joinedAt: attendee.joinedAt,
-          alias: room.profiles[attendee.userId]?.name ?? attendee.userId,
-          email: room.profiles[attendee.userId]?.email ?? null,
-        }));
-        const loop = ensureWaitingLoop(room);
+        room.profiles[room.ownerId] = {
+          name: room.ownerName ?? room.profiles[room.ownerId]?.name ?? "Host",
+          email: room.profiles[room.ownerId]?.email ?? null,
+        };
+        room.attendees = [];
         loop.status = "active";
         loop.startedAt = timestamp;
         loop.meetingPoint = room.meetingPoint;
         loop.scheduledAt = room.scheduledAt ?? timestamp;
-        loop.participants = participants;
-        loop.participantIds = participants.map((participant) => participant.userId);
-        loop.createdBy = userId ?? loop.createdBy ?? null;
+        loop.participants = [
+          toParticipant(room, room.ownerId, timestamp),
+        ];
+        loop.participantIds = [room.ownerId];
+        loop.createdBy = room.ownerId;
         loop.ownerId = room.ownerId ?? null;
         loop.ownerName = room.ownerName ?? null;
         loop.messages = [];
         loop.feedback = null;
+        loop.endedAt = null;
+        loop.autoClosed = false;
         break;
       }
       case "endLoop": {
@@ -607,6 +773,29 @@ export async function POST(request: Request) {
         };
         const messages = loop.messages ?? [];
         loop.messages = [...messages, entry].slice(-100);
+        break;
+      }
+      case "location": {
+        if (!userId) {
+          throw new HttpError(403, "Nur angemeldete Nutzer:innen können ihren Standort teilen.");
+        }
+        const lat = Number(payload.lat);
+        const lng = Number(payload.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new HttpError(400, "Koordinaten ungültig.");
+        }
+        const location: ParticipantLocation = {
+          lat,
+          lng,
+          updatedAt: nowIso(),
+        };
+        room.locations[userId] = location;
+        room.loops.forEach((loop) => {
+          const participants = loop.participants ?? [];
+          loop.participants = participants.map((participant) =>
+            participant.userId === userId ? { ...participant, location } : participant,
+          );
+        });
         break;
       }
       default:

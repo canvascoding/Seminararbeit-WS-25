@@ -4,10 +4,12 @@ import { Plus } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { TopNav } from "@/components/layout/top-nav";
 import { Footer } from "@/components/layout/footer";
-import { SlotsBoard } from "@/components/slots/slots-board";
-import { listSlots, getVenueById } from "@/lib/repositories/loop-repository";
+import { ActiveLoops } from "@/components/slots/active-loops";
+import { listSlots, getVenueById, listActiveLoops } from "@/lib/repositories/loop-repository";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { intentIndex } from "@/data/intents";
 
 interface Props {
   params: Promise<{ venueId: string }>;
@@ -18,7 +20,12 @@ export default async function VenueSlotsPage({ params }: Props) {
   const venue = await getVenueById(venueId);
   if (!venue) return notFound();
   const slots = await listSlots(venue.id);
+  const activeLoops = await listActiveLoops(venue.id);
   const t = await getTranslations("slots");
+  const intentLabels =
+    venue.defaultIntents
+      ?.map((intent) => intentIndex[intent]?.label)
+      .filter((label): label is string => Boolean(label)) ?? [];
   const waitingRoomLink = `/waiting-room?${new URLSearchParams({
     venue: venue.id,
   }).toString()}`;
@@ -35,15 +42,24 @@ export default async function VenueSlotsPage({ params }: Props) {
               </p>
               <h1 className="text-3xl font-semibold text-loop-slate">{venue.name}</h1>
               <p className="text-loop-slate/70">{t("subtitle")}</p>
+              {intentLabels.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {intentLabels.map((label) => (
+                    <Badge key={label} className="text-loop-slate">
+                      {label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <Button asChild className="sm:self-start">
-              <Link href={waitingRoomLink as any}>
+              <Link href={waitingRoomLink}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("createLoopButton")}
               </Link>
             </Button>
           </div>
-          <SlotsBoard venue={venue} initialSlots={slots} />
+          <ActiveLoops venue={venue} slots={slots} initialLoops={activeLoops} />
         </main>
         <Footer />
       </div>

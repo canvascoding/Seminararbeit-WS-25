@@ -259,13 +259,21 @@ export function LoopCenter() {
               : "/waiting-room";
             const showFeedbackForm =
               feedbackLoopId === loop.id && loop.isOwner && loop.status !== "completed";
+            const hostName = loop.ownerName ?? t("loopFallbackOwner");
+            const hasGuests = loop.participants.some(
+              (participant) => participant.userId && participant.userId !== resolvedUserId,
+            );
+            const canCloseFromCenter = loop.isOwner && loop.status !== "completed" && hasGuests;
             return (
               <Card key={loop.id} className="p-4 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-loop-slate">
-                      {loop.venueName ?? t("loopFallbackTitle", { id: loop.id })}
+                      {t("loopFallbackTitle", { owner: hostName })}
                     </p>
+                    {loop.venueName && (
+                      <p className="text-xs text-loop-slate/60">{loop.venueName}</p>
+                    )}
                     <p className="text-xs text-loop-slate/60">
                       {loop.meetingPoint?.label
                         ? `${t("meetingPointLabel")}: ${loop.meetingPoint.label}${
@@ -357,18 +365,18 @@ export function LoopCenter() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {loop.isOwner && (
-                    <Button asChild variant="secondary">
-                      <Link href={waitingRoomUrl as any}>{t("openWaitingRoom")}</Link>
-                    </Button>
-                  )}
-                  {loop.isOwner && loop.status !== "completed" && (
-                    <Button
-                      variant={showFeedbackForm ? "ghost" : "danger"}
-                      onClick={() => {
-                        if (showFeedbackForm) {
-                          resetFeedbackState();
+                  <div className="flex flex-wrap gap-2">
+                    {loop.isOwner && (
+                      <Button asChild variant="secondary">
+                        <Link href={waitingRoomUrl}>{t("openWaitingRoom")}</Link>
+                      </Button>
+                    )}
+                    {canCloseFromCenter && (
+                      <Button
+                        variant={showFeedbackForm ? "ghost" : "danger"}
+                        onClick={() => {
+                          if (showFeedbackForm) {
+                            resetFeedbackState();
                         } else {
                           setFeedbackLoopId(loop.id);
                           setFeedbackRating("");

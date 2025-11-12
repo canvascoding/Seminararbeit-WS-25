@@ -29,12 +29,17 @@ export function LoopStatusCard({ loopId, initialLoop }: Props) {
     );
   }
 
+  const loopTitle = loop.ownerName ? `Loop von ${loop.ownerName}` : "Aktuelles Loop";
+  const participantNames =
+    loop.participantProfiles?.map((participant) => participant.alias) ??
+    loop.participants;
+
   return (
     <div className="rounded-3xl border border-white/80 bg-white/80 p-6 shadow-loop-card">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-loop-slate/60">Loop ID</p>
-          <p className="text-xl font-semibold">{loop.id}</p>
+          <p className="text-sm text-loop-slate/60">Aktuelles Loop</p>
+          <p className="text-xl font-semibold">{loopTitle}</p>
         </div>
         <Badge tone={loop.status === "done" ? "neutral" : "success"}>
           {loop.status}
@@ -56,8 +61,8 @@ export function LoopStatusCard({ loopId, initialLoop }: Props) {
             })}
           </p>
         )}
-        {loop.participants.length > 0 && (
-          <p>Teilnehmende: {loop.participants.join(", ")}</p>
+        {participantNames.length > 0 && (
+          <p>Teilnehmende: {participantNames.join(", ")}</p>
         )}
       </div>
     </div>

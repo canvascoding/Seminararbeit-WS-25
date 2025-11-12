@@ -19,5 +19,19 @@
   "intentSmalltalk": "Smalltalk",
   "intentCoStudy": "Co-Study",
   "intentWalkTalk": "Walk & Talk",
-  "intentCoffeeBreak": "Kaffee & kurze Pause"
+  "intentCoffeeBreak": "Kaffee & kurze Pause",
+  "activeLoopsHeading": "Aktive Loops vor Ort",
+  "activeLoopsDescription": "Hier laufen aktuell Loops an diesem Venue. Du kannst sofort beitreten, solange Plätze frei sind.",
+  "activeLoopsEmpty": "Gerade läuft hier kein Loop. Starte einen neuen oder prüfe später erneut.",
+  "activeLoopsParticipants": "{{count}} von {{capacity}} Plätzen belegt",
+  "activeLoopsMeetPoint": "Treffpunkt: {{label}}",
+  "activeLoopsMeetPointFallback": "Treffpunkt wird noch bestätigt",
+  "activeLoopsStartTime": "Start: {{time}}",
+  "activeLoopsJoin": "Loop beitreten",
+  "activeLoopsJoining": "Beitreten ...",
+  "activeLoopsLoginHint": "Bitte logge dich ein, um einem Loop beizutreten.",
+  "activeLoopsJoinError": "Loop konnte nicht beigetreten werden. Bitte versuche es später erneut.",
+  "activeLoopsStatusActive": "Läuft",
+  "activeLoopsStatusScheduled": "Startet gleich",
+  "activeLoopsStatusInProgress": "In Vorbereitung"
 }

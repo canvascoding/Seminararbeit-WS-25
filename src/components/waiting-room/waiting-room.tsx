@@ -16,12 +16,20 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/providers/auth-provider";
+import { MeetingMap } from "./meeting-map";
+
+interface ParticipantLocation {
+  lat: number;
+  lng: number;
+  updatedAt: string;
+}
 
 interface WaitingParticipant {
   userId: string;
   alias: string;
   joinedAt: string;
   email?: string | null;
+  location?: ParticipantLocation | null;
 }
 
 interface LoopMessage {
@@ -159,11 +167,13 @@ export function WaitingRoom({
   const [chatMessage, setChatMessage] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
   const [chatNotice, setChatNotice] = useState<string | null>(null);
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<FeedbackRating | "">("");
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const lastLocationRef = useRef<{ lat: number; lng: number; timestamp: number } | null>(null);
   const userId = firebaseUser?.uid ?? localMockUserId;
   const ownerName = useMemo(() => {
     if (profile?.displayName) return profile.displayName;
@@ -318,12 +328,6 @@ export function WaitingRoom({
       setError(t("missingName"));
       return;
     }
-    if (waitingRoomLocked) {
-      setError(
-        isOwner ? t("setupOwnerNotice") : t("setupGuestNotice"),
-      );
-      return;
-    }
     setInfo(null);
     try {
       await mutateRoom({
@@ -334,7 +338,7 @@ export function WaitingRoom({
       if (typeof window !== "undefined") {
         window.localStorage.setItem("loopTestUserName", displayName.trim());
       }
-      setInfo(t("joinQueued"));
+      setInfo(t("joinConfirmed"));
     } catch {
       // handled in mutateRoom
     }
@@ -511,6 +515,16 @@ export function WaitingRoom({
     );
   }, [data, userId]);
 
+  const loopIdForLocation = matchedLoop?.id ?? null;
+
+  const activeLoop = useMemo(() => {
+    if (!data) return null;
+    return data.loops.find((loop) => loop.status === "active") ?? null;
+  }, [data]);
+
+  const displayedLoop = matchedLoop ?? activeLoop ?? null;
+  const activeParticipants = displayedLoop?.participants ?? [];
+
   useEffect(() => {
     setChatNotice(null);
     setChatMessage("");
@@ -520,14 +534,60 @@ export function WaitingRoom({
     setFeedbackError(null);
   }, [matchedLoop?.id]);
 
-  const isWaiting =
-    !!userId && !!data?.waiting?.some((attendee) => attendee.userId === userId);
+  useEffect(() => {
+    if (!loopIdForLocation || !userId) {
+      setLocationNotice(null);
+      lastLocationRef.current = null;
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocationNotice(t("locationUnsupported"));
+      return;
+    }
+    const successHandler: PositionCallback = (position) => {
+      setLocationNotice(null);
+      const lat = Number(position.coords.latitude.toFixed(6));
+      const lng = Number(position.coords.longitude.toFixed(6));
+      const now = Date.now();
+      const last = lastLocationRef.current;
+      if (
+        last &&
+        now - last.timestamp < 30_000 &&
+        Math.abs(last.lat - lat) < 0.0005 &&
+        Math.abs(last.lng - lng) < 0.0005
+      ) {
+        return;
+      }
+      lastLocationRef.current = { lat, lng, timestamp: now };
+      mutateRoom({ action: "location", lat, lng }).catch(() => {
+        // ignore network errors to avoid noisy UI
+      });
+    };
+    const errorHandler: PositionErrorCallback = (error) => {
+      if (error.code === error.PERMISSION_DENIED) {
+        setLocationNotice(t("locationPermissionDenied"));
+      } else {
+        setLocationNotice(t("locationUnavailable"));
+      }
+    };
+    const watchId = navigator.geolocation.watchPosition(successHandler, errorHandler, {
+      enableHighAccuracy: true,
+      maximumAge: 15_000,
+      timeout: 10_000,
+    });
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [loopIdForLocation, mutateRoom, t, userId]);
 
   const resolvedVenueName = data?.venueName ?? venueName ?? null;
 
   const ownerId = data?.ownerId ?? null;
   const ownerDisplayName = data?.ownerName ?? null;
   const isOwner = Boolean(userId && ownerId === userId);
+  const loopTitle = ownerDisplayName
+    ? t("loopTitleHost", { owner: ownerDisplayName })
+    : t("loopTitleFallback");
   const roomStatus = data?.status ?? "waitingRoom";
   const statusLabelKey =
     roomStatus === "active"
@@ -548,7 +608,15 @@ export function WaitingRoom({
       : null;
   const ownerHint =
     !isOwner && ownerDisplayName ? t("ownerLockedHint", { owner: ownerDisplayName }) : null;
-  const waiting = data?.waiting ?? [];
+  const participantCount = activeParticipants.length;
+  const hostLabel = displayedLoop?.ownerName ?? ownerDisplayName ?? t("loopFallbackOwner");
+  const statusMessage = matchedLoop
+    ? t("statusMatched", { owner: hostLabel })
+    : displayedLoop
+      ? t("statusWatching", { owner: hostLabel })
+      : isOwner
+        ? t("statusIdleOwner")
+        : t("statusIdleGuest");
   const loops = data?.loops ?? [];
   const lastUpdatedLabel = useMemo(() => {
     if (!data?.lastUpdated) return null;
@@ -563,50 +631,98 @@ export function WaitingRoom({
       ? t("setupOwnerNotice")
       : t("setupGuestNotice")
     : null;
-  const joinDisabled = !displayName.trim() || waitingRoomLocked;
-  const canSendChat = Boolean(chatMessage.trim()) && !sendingChat;
+  const canJoinLoop =
+    !isOwner && displayedLoop?.status === "active" && !matchedLoop;
+  const joinDisabled = !displayName.trim();
+  const canSendChat = Boolean(chatMessage.trim()) && !sendingChat && Boolean(matchedLoop);
 
   const activeMessages = useMemo(() => {
-    if (!matchedLoop?.messages) return [];
-    return [...matchedLoop.messages].sort(
+    if (!displayedLoop?.messages) return [];
+    return [...displayedLoop.messages].sort(
       (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
     );
-  }, [matchedLoop?.messages]);
+  }, [displayedLoop?.messages]);
 
   const activeMeetPointOption = useMemo(() => {
-    if (!matchedLoop?.meetingPoint?.id) return null;
+    if (!displayedLoop?.meetingPoint?.id) return null;
     return (
-      meetPoints.find((point) => point.id === matchedLoop.meetingPoint?.id) ?? null
+      meetPoints.find((point) => point.id === displayedLoop.meetingPoint?.id) ?? null
     );
-  }, [matchedLoop?.meetingPoint?.id, meetPoints]);
+  }, [displayedLoop?.meetingPoint?.id, meetPoints]);
 
-  const mapQuery = useMemo(() => {
-    if (!matchedLoop?.meetingPoint?.label) return null;
-    const coords = activeMeetPointOption?.geoOffset ?? venueGeo ?? null;
-    if (
-      coords &&
-      typeof coords.lat === "number" &&
-      typeof coords.lng === "number"
-    ) {
-      return `${coords.lat},${coords.lng}`;
+  const participantMarkers = useMemo(() => {
+    if (!displayedLoop?.participants) return [];
+    return displayedLoop.participants
+      .map((participant) => {
+        if (!participant.location) return null;
+        const isSelf = participant.userId === userId;
+        return {
+          userId: participant.userId,
+          alias: participant.alias,
+          lat: participant.location.lat,
+          lng: participant.location.lng,
+          updatedAt: participant.location.updatedAt,
+          isSelf,
+          label: isSelf
+            ? t("matchedParticipantsYou", { name: participant.alias })
+            : participant.alias,
+        };
+      })
+      .filter((marker): marker is {
+        userId: string;
+        alias: string;
+        lat: number;
+        lng: number;
+        updatedAt: string;
+        isSelf: boolean;
+        label: string;
+      } => Boolean(marker));
+  }, [displayedLoop?.participants, t, userId]);
+
+  const mapCenter = useMemo(() => {
+    if (activeMeetPointOption?.geoOffset) return activeMeetPointOption.geoOffset;
+    if (participantMarkers.length > 0) {
+      const lat =
+        participantMarkers.reduce((sum, marker) => sum + marker.lat, 0) /
+        participantMarkers.length;
+      const lng =
+        participantMarkers.reduce((sum, marker) => sum + marker.lng, 0) /
+        participantMarkers.length;
+      return { lat, lng };
     }
-    const parts = [
-      resolvedVenueName,
-      matchedLoop.meetingPoint.label,
-      matchedLoop.meetingPoint.description,
-    ].filter(Boolean);
-    return parts.length ? parts.join(" ") : null;
-  }, [
-    activeMeetPointOption?.geoOffset,
-    matchedLoop?.meetingPoint?.description,
-    matchedLoop?.meetingPoint?.label,
-    venueGeo,
-    resolvedVenueName,
-  ]);
+    if (venueGeo) return venueGeo;
+    return null;
+  }, [activeMeetPointOption?.geoOffset, participantMarkers, venueGeo]);
 
-  const mapSrc = mapQuery
-    ? `https://www.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
-    : null;
+  const mapMarkers = useMemo(() => {
+    const markers: Array<{
+      lat: number;
+      lng: number;
+      tone: "meeting" | "participant" | "self";
+      label: string;
+    }> = [];
+    if (
+      activeMeetPointOption?.geoOffset &&
+      typeof activeMeetPointOption.geoOffset.lat === "number" &&
+      typeof activeMeetPointOption.geoOffset.lng === "number"
+    ) {
+      markers.push({
+        lat: activeMeetPointOption.geoOffset.lat,
+        lng: activeMeetPointOption.geoOffset.lng,
+        tone: "meeting",
+        label: activeMeetPointOption.label,
+      });
+    }
+    participantMarkers.forEach((marker) => {
+      markers.push({
+        lat: marker.lat,
+        lng: marker.lng,
+        tone: marker.isSelf ? "self" : "participant",
+        label: marker.label,
+      });
+    });
+    return markers;
+  }, [activeMeetPointOption?.geoOffset, activeMeetPointOption?.label, participantMarkers]);
   const selectedMeetingPoint = useMemo(
     () => meetPoints.find((point) => point.id === selectedMeetPointId) ?? null,
     [meetPoints, selectedMeetPointId],
@@ -623,17 +739,22 @@ export function WaitingRoom({
   const canStartLoop =
     isOwner &&
     setupComplete &&
-    roomStatus === "waitingRoom" &&
-    waiting.length >= 2 &&
+    roomStatus !== "active" &&
     !!data?.meetingPoint?.label &&
     !!data?.scheduledAt &&
-    !matchedLoop;
+    !activeLoop;
   const meetingPointSummary = data?.meetingPoint?.label
     ? `${data.meetingPoint.label}${data.meetingPoint.description ? ` · ${data.meetingPoint.description}` : ""}`
     : null;
   const scheduleSummary = data?.scheduledAt
     ? formatDateDisplay(data.scheduledAt)
     : null;
+  const hasGuestsInActiveLoop =
+    Boolean(activeLoop) &&
+    activeParticipants.some((participant) => participant.userId !== userId);
+  const canResetRoom = isOwner && !hasGuestsInActiveLoop;
+  const canShowEndLoop =
+    Boolean(isOwner && matchedLoop?.status === "active" && matchedLoop.participantIds.some((id) => id !== userId));
   const scheduleMin = formatInputValue(new Date());
   const scheduleMax = formatInputValue(new Date(Date.now() + TWO_HOURS_MS));
 
@@ -645,7 +766,9 @@ export function WaitingRoom({
             <p className="text-sm uppercase tracking-wide text-loop-slate/60">
               {t("roomLabel")}
             </p>
-            <p className="text-2xl font-semibold text-loop-slate break-all">{roomId}</p>
+            <p className="text-2xl font-semibold text-loop-slate break-words">
+              {loopTitle}
+            </p>
             {resolvedVenueName && (
               <p className="text-sm text-loop-slate/60">
                 {t("roomVenue", { venue: resolvedVenueName })}
@@ -775,15 +898,21 @@ export function WaitingRoom({
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={handleJoin} disabled={joinDisabled}>
-            {t("joinButton")}
-          </Button>
-          <Button variant="secondary" onClick={handleStartLoop} disabled={!canStartLoop}>
-            {t("startLoopButton")}
-          </Button>
-          <Button variant="ghost" onClick={handleReset} disabled={!isOwner}>
-            {t("resetButton")}
-          </Button>
+          {canJoinLoop && (
+            <Button onClick={handleJoin} disabled={joinDisabled}>
+              {t("joinButton")}
+            </Button>
+          )}
+          {isOwner && (
+            <>
+              <Button variant="secondary" onClick={handleStartLoop} disabled={!canStartLoop}>
+                {t("startLoopButton")}
+              </Button>
+              <Button variant="ghost" onClick={handleReset} disabled={!canResetRoom}>
+                {t("resetButton")}
+              </Button>
+            </>
+          )}
         </div>
         {setupNotice && (
           <p className="text-sm text-loop-rose/70">{setupNotice}</p>
@@ -802,34 +931,28 @@ export function WaitingRoom({
             {error}
           </p>
         )}
-        <p className="text-sm text-loop-slate/70">
-          {matchedLoop
-            ? t("statusMatched", { loopId: matchedLoop.id })
-            : isWaiting
-              ? t("statusWaiting")
-              : t("statusIdle")}
-        </p>
-        {matchedLoop && (
+        <p className="text-sm text-loop-slate/70">{statusMessage}</p>
+        {displayedLoop && (
           <div className="rounded-2xl border border-loop-green/30 bg-loop-green/5 px-4 py-4 text-sm text-loop-slate">
             <div className="space-y-3">
               <div>
                 <p className="font-semibold">
-                  {t("matchedHeadline", { loopId: matchedLoop.id })}
+                  {t("matchedHeadline", { owner: hostLabel })}
                 </p>
                 <p className="mt-1 text-loop-slate/70">{t("matchedDescription")}</p>
               </div>
-              {matchedLoop.meetingPoint?.label && (
+              {displayedLoop.meetingPoint?.label && (
                 <p className="text-loop-slate">
-                  {t("loopMeetingPoint")}: {matchedLoop.meetingPoint.label}
-                  {matchedLoop.meetingPoint.description
-                    ? ` · ${matchedLoop.meetingPoint.description}`
+                  {t("loopMeetingPoint")}: {displayedLoop.meetingPoint.label}
+                  {displayedLoop.meetingPoint.description
+                    ? ` · ${displayedLoop.meetingPoint.description}`
                     : ""}
                 </p>
               )}
-              {matchedLoop.scheduledAt && (
+              {displayedLoop.scheduledAt && (
                 <p className="text-loop-slate/70">
                   {t("loopScheduledAt", {
-                    time: formatDateDisplay(matchedLoop.scheduledAt),
+                    time: formatDateDisplay(displayedLoop.scheduledAt),
                   })}
                 </p>
               )}
@@ -837,7 +960,7 @@ export function WaitingRoom({
                 {t("matchedParticipantsHeadline")}
               </p>
               <div className="flex flex-wrap gap-2">
-                {matchedLoop.participants.map((participant) => (
+                {activeParticipants.map((participant) => (
                   <Badge
                     key={participant.userId}
                     tone={participant.userId === userId ? "success" : "neutral"}
@@ -853,17 +976,17 @@ export function WaitingRoom({
                   <p className="text-sm uppercase tracking-wide text-loop-slate/60">
                     {t("mapHeadline")}
                   </p>
-                  {mapSrc ? (
-                    <div className="mt-2 overflow-hidden rounded-2xl border border-loop-slate/10 bg-white">
-                      <iframe
-                        src={mapSrc}
-                        title="Treffpunkt auf Google Maps"
-                        loading="lazy"
-                        className="h-48 w-full"
-                        referrerPolicy="no-referrer-when-downgrade"
-                        allowFullScreen
-                      />
-                    </div>
+                  {mapCenter ? (
+                    <>
+                      <div className="mt-2 overflow-hidden rounded-2xl border border-loop-slate/10 bg-white">
+                        <MeetingMap center={mapCenter} markers={mapMarkers} />
+                      </div>
+                      <ul className="mt-2 text-xs text-loop-slate/60 space-y-0.5">
+                        <li>{t("mapLegendMeetingPoint")}</li>
+                        <li>{t("mapLegendParticipant")}</li>
+                        <li>{t("mapLegendSelf")}</li>
+                      </ul>
+                    </>
                   ) : (
                     <p className="mt-2 text-sm text-loop-slate/70">
                       {t("mapUnavailable")}
@@ -873,6 +996,9 @@ export function WaitingRoom({
                     <p className="mt-2 text-sm text-loop-slate/70">
                       {activeMeetPointOption.instructions}
                     </p>
+                  )}
+                  {locationNotice && (
+                    <p className="mt-2 text-xs text-loop-rose/70">{locationNotice}</p>
                   )}
                 </div>
                 <div className="rounded-2xl border border-loop-green/20 bg-white/80 p-3">
@@ -919,7 +1045,7 @@ export function WaitingRoom({
                   )}
                 </div>
               </div>
-              {isOwner && (
+              {canShowEndLoop && matchedLoop && (
                 <div className="mt-4 rounded-2xl border border-loop-slate/20 bg-white/90 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold text-loop-slate">
@@ -1014,16 +1140,16 @@ export function WaitingRoom({
               {t("participantsHeadline")}
             </h3>
             <Badge tone="neutral" className="shrink-0">
-              {waiting.length} / {capacity}
+              {participantCount} / {capacity}
             </Badge>
           </div>
           <div className="space-y-3">
-            {waiting.length === 0 && (
+            {participantCount === 0 && (
               <p className="rounded-2xl border border-dashed border-loop-slate/20 px-4 py-3 text-sm text-loop-slate/70">
                 {t("emptyWaiting")}
               </p>
             )}
-            {waiting.map((participant) => (
+            {activeParticipants.map((participant) => (
               <div
                 key={participant.userId}
                 className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3.5 sm:px-4 py-2.5"
@@ -1033,9 +1159,11 @@ export function WaitingRoom({
                     {participant.alias}
                   </p>
                   <p className="text-sm text-loop-slate/50 truncate">
-                    {t("joinedAt", {
-                      time: formatTimeDisplay(participant.joinedAt),
-                    })}
+                    {participant.location
+                      ? t("locationUpdatedAt", {
+                          time: formatTimeDisplay(participant.location.updatedAt),
+                        })
+                      : t("locationPending")}
                   </p>
                 </div>
                 <Badge tone="success" className="shrink-0 text-xs px-2 py-0.5">
@@ -1072,6 +1200,7 @@ export function WaitingRoom({
                 : loopIsWaiting
                   ? t("loopStatusWaiting")
                   : t("loopStatusCompleted");
+              const loopHostName = loop.ownerName ?? t("loopFallbackOwner");
               return (
                 <div
                   key={loop.id}
@@ -1079,7 +1208,7 @@ export function WaitingRoom({
                 >
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <p className="text-sm font-semibold text-loop-slate truncate min-w-0">
-                      {t("loopLabel", { id: loop.id })}
+                      {t("loopLabel", { owner: loopHostName })}
                     </p>
                     <Badge tone={loopTone} className="shrink-0 text-xs px-2 py-0.5">
                       {loopLabel}

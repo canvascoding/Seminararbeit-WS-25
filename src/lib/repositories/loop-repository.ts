@@ -3,6 +3,7 @@ import { mockLoops, mockPartnerMetrics, mockSlots, mockVenues } from "@/data/moc
 import type {
   IncidentReport,
   Loop,
+  LoopStatus,
   Slot,
   UserProfile,
   Venue,
@@ -105,6 +106,55 @@ export async function listSlots(venueId?: string, fromDate?: Date): Promise<Slot
   }
 
   return slots;
+}
+
+const ACTIVE_LOOP_STATUSES: LoopStatus[] = ["active", "inProgress", "scheduled"];
+
+function getLoopSortTimestamp(loop: Loop) {
+  const candidates = [loop.startAt, loop.scheduledAt, loop.createdAt];
+  for (const value of candidates) {
+    if (!value) continue;
+    const timestamp = new Date(value).getTime();
+    if (!Number.isNaN(timestamp)) {
+      return timestamp;
+    }
+  }
+  return 0;
+}
+
+export async function listActiveLoops(venueId: string): Promise<Loop[]> {
+  if (useMock) {
+    return mockLoops
+      .filter((loop) => ACTIVE_LOOP_STATUSES.includes(loop.status))
+      .filter((loop) => loop.venueId === venueId)
+      .sort((a, b) => getLoopSortTimestamp(a) - getLoopSortTimestamp(b));
+  }
+
+  const db = getAdminDb();
+  const snapshot = await db
+    .collection("loops")
+    .where("venueId", "==", venueId)
+    .where("status", "in", ACTIVE_LOOP_STATUSES)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data() as Loop & {
+        startAt?: FirestoreDate;
+        scheduledAt?: FirestoreDate;
+        createdAt?: FirestoreDate;
+        endedAt?: FirestoreDate | null;
+      };
+      return {
+        ...data,
+        id: doc.id,
+        startAt: data.startAt ? serializeDate(data.startAt) : undefined,
+        scheduledAt: data.scheduledAt ? serializeDate(data.scheduledAt) : undefined,
+        createdAt: data.createdAt ? serializeDate(data.createdAt) : undefined,
+        endedAt: data.endedAt ? serializeDate(data.endedAt) : null,
+      } as Loop;
+    })
+    .sort((a, b) => getLoopSortTimestamp(a) - getLoopSortTimestamp(b));
 }
 
 export async function joinSlot(slotId: string, user: SlotJoinUser) {
