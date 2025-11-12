@@ -126,11 +126,12 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
             const slotAvailable = participantCount < capacity && Boolean(loop.slotId);
 
             const userIsParticipant =
-              Boolean(firebaseUser?.uid) &&
-              (loop.participants.includes(firebaseUser.uid) ||
-                loop.participantProfiles?.some(
-                  (participant) => participant.userId === firebaseUser.uid,
-                ));
+              firebaseUser?.uid
+                ? loop.participants.includes(firebaseUser.uid) ||
+                  loop.participantProfiles?.some(
+                    (participant) => participant.userId === firebaseUser.uid,
+                  )
+                : false;
             const loopLink = loop.roomId
               ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}`
               : loop.id
