@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SlotAttendee } from "@/types/domain";
 import { getAdminDb, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
+import { getVenueById } from "@/lib/repositories/loop-repository";
 
 const LOOP_AUTO_CLOSE_MS = 2 * 60 * 60 * 1000;
 const MAX_LOOP_HISTORY = 12;
@@ -39,9 +40,19 @@ interface RoomChatMessage {
 }
 
 type LoopFeedbackRating = "great" | "ok" | "bad";
+type LoopFeedbackAttendance =
+  | "allPresent"
+  | "someoneMissing"
+  | "stoodAlone"
+  | "unknown";
+type LoopFeedbackSafety = "verySafe" | "mostlySafe" | "unsafe" | "unknown";
+type LoopFeedbackFollowUp = "again" | "maybe" | "no" | "unknown";
 
 interface RoomLoopFeedback {
   rating: LoopFeedbackRating;
+  attendance: LoopFeedbackAttendance;
+  safety: LoopFeedbackSafety;
+  followUp: LoopFeedbackFollowUp;
   note?: string | null;
   submittedAt: string;
   submittedBy?: string | null;
@@ -58,6 +69,7 @@ interface RoomLoop {
   scheduledAt: string | null;
   startedAt: string | null;
   endedAt?: string | null;
+  capacity?: number;
   status: LoopPhase;
   durationMinutes?: number;
   autoClosed?: boolean;
@@ -147,6 +159,35 @@ function normalizeRoom(roomId: string, source?: Partial<RoomState>): RoomState {
     capacityConfirmed: source?.capacityConfirmed ?? base.capacityConfirmed,
     locations: source?.locations ?? base.locations,
   };
+}
+
+async function resolveDefaultParticipantLocation(
+  room: RoomState,
+): Promise<ParticipantLocation | null> {
+  if (!room.venueId) return null;
+  try {
+    const venue = await getVenueById(room.venueId);
+    if (!venue) return null;
+    const meetingPointId = room.meetingPoint?.id ?? null;
+    const meetingPointCoords = meetingPointId
+      ? venue.meetPoints?.find((point) => point.id === meetingPointId)?.geoOffset
+      : null;
+    const fallbackCoords = meetingPointCoords ?? venue.geo;
+    if (
+      !fallbackCoords ||
+      !Number.isFinite(Number(fallbackCoords.lat)) ||
+      !Number.isFinite(Number(fallbackCoords.lng))
+    ) {
+      return null;
+    }
+    return {
+      lat: Number(fallbackCoords.lat),
+      lng: Number(fallbackCoords.lng),
+      updatedAt: nowIso(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function updateParticipantIndex(room: RoomState) {
@@ -362,36 +403,8 @@ function isRoomSetupComplete(room: RoomState) {
     room.ownerId &&
     room.ownerName &&
     room.capacityConfirmed &&
-    room.meetingPoint?.label &&
-    room.scheduledAt,
+    room.meetingPoint?.label,
   );
-}
-
-function validateScheduleInput(value?: string | null) {
-  const now = Date.now();
-  const min = now - 60_000;
-  const max = now + 2 * 60 * 60 * 1000;
-  if (!value) {
-    return { ok: true, iso: new Date(now).toISOString() };
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return { ok: false, message: "Startzeit ist ungültig." };
-  }
-  const timestamp = date.getTime();
-  if (timestamp < min) {
-    return {
-      ok: false,
-      message: "Die Startzeit muss in der Zukunft liegen und darf nicht in der Vergangenheit liegen.",
-    };
-  }
-  if (timestamp > max) {
-    return {
-      ok: false,
-      message: "Die Startzeit darf höchstens zwei Stunden in der Zukunft liegen.",
-    };
-  }
-  return { ok: true, iso: date.toISOString() };
 }
 
 function finalizeLoop(
@@ -447,6 +460,7 @@ function ensureWaitingLoop(room: RoomState) {
   if (existing) {
     existing.meetingPoint = room.meetingPoint;
     existing.scheduledAt = room.scheduledAt;
+    existing.capacity = room.capacity;
     existing.messages = existing.messages ?? [];
     existing.participants = existing.participants ?? [];
     existing.participantIds = existing.participantIds ?? [];
@@ -459,6 +473,7 @@ function ensureWaitingLoop(room: RoomState) {
     createdAt: nowIso(),
     meetingPoint: room.meetingPoint,
     scheduledAt: room.scheduledAt,
+    capacity: room.capacity,
     startedAt: null,
     endedAt: null,
     status: "waitingRoom",
@@ -580,6 +595,12 @@ export async function POST(request: Request) {
         if (activeLoop.participants.length >= room.capacity) {
           throw new HttpError(400, "Dieses Loop ist bereits voll.");
         }
+        if (!room.locations[userId]) {
+          const inferredLocation = await resolveDefaultParticipantLocation(room);
+          if (inferredLocation) {
+            room.locations[userId] = inferredLocation;
+          }
+        }
         room.profiles[userId] = {
           name: displayName,
           email: email ?? room.profiles[userId]?.email ?? null,
@@ -633,17 +654,6 @@ export async function POST(request: Request) {
           room.capacity = Math.round(capacity);
           room.capacityConfirmed = true;
         }
-        if ("scheduledAt" in payload) {
-          const scheduleInput = payload.scheduledAt as string | null | undefined;
-          const validation = validateScheduleInput(scheduleInput);
-          if (!validation.ok || !validation.iso) {
-            throw new HttpError(
-              400,
-              validation.message ?? "Startzeit ungültig",
-            );
-          }
-          room.scheduledAt = validation.iso;
-        }
         if (payload.meetPointLabel) {
           const label = String(payload.meetPointLabel).trim();
           if (!label) {
@@ -691,6 +701,7 @@ export async function POST(request: Request) {
           );
         }
         const timestamp = nowIso();
+        room.scheduledAt = timestamp;
         room.profiles[room.ownerId] = {
           name: room.ownerName ?? room.profiles[room.ownerId]?.name ?? "Host",
           email: room.profiles[room.ownerId]?.email ?? null,
@@ -700,6 +711,7 @@ export async function POST(request: Request) {
         loop.startedAt = timestamp;
         loop.meetingPoint = room.meetingPoint;
         loop.scheduledAt = room.scheduledAt ?? timestamp;
+        loop.capacity = room.capacity;
         loop.participants = [
           toParticipant(room, room.ownerId, timestamp),
         ];
@@ -727,13 +739,34 @@ export async function POST(request: Request) {
           const rating = payload.feedbackRating as LoopFeedbackRating | undefined;
           const note =
             (payload.feedbackNote as string | undefined)?.trim() || null;
+          const attendance = payload.feedbackAttendance as LoopFeedbackAttendance | undefined;
+          const safety = payload.feedbackSafety as LoopFeedbackSafety | undefined;
+          const followUp = payload.feedbackFollowUp as LoopFeedbackFollowUp | undefined;
           const validRating =
             rating === "great" || rating === "ok" || rating === "bad";
-          if (!validRating) {
+          const validAttendance =
+            attendance === "allPresent" ||
+            attendance === "someoneMissing" ||
+            attendance === "stoodAlone" ||
+            attendance === "unknown";
+          const validSafety =
+            safety === "verySafe" ||
+            safety === "mostlySafe" ||
+            safety === "unsafe" ||
+            safety === "unknown";
+          const validFollowUp =
+            followUp === "again" ||
+            followUp === "maybe" ||
+            followUp === "no" ||
+            followUp === "unknown";
+          if (!validRating || !validAttendance || !validSafety || !validFollowUp) {
             throw new HttpError(400, "Feedback erforderlich");
           }
           const feedback: RoomLoopFeedback = {
             rating,
+            attendance,
+            safety,
+            followUp,
             note,
             submittedAt: nowIso(),
             submittedBy: userId ?? null,

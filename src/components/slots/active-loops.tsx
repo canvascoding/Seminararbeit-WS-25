@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { Loop, Slot, Venue } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ function formatTime(value?: string | null) {
 export function ActiveLoops({ venue, slots, initialLoops }: Props) {
   const t = useTranslations("slots");
   const { firebaseUser } = useAuth();
+  const router = useRouter();
   const slotIndex = useMemo(() => {
     const map = new Map<string, Slot>();
     slots.forEach((slot) => map.set(slot.id, slot));
@@ -118,13 +120,17 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
               t("activeLoopsMeetPointFallback");
             const meetPointDescription =
               loop.meetPoint?.description ?? meetPointFromSlot?.description ?? "";
+            const participantProfilesCount =
+              loop.participantProfiles && loop.participantProfiles.length > 0
+                ? loop.participantProfiles.length
+                : null;
             const participantCount =
-              loop.participantProfiles?.length ?? loop.participants.length;
+              participantProfilesCount ?? loop.participants.length;
             const capacity =
               loop.capacity ?? slot?.capacity ?? venue.capacity ?? 4;
             const timeLabel = formatTime(loop.startAt ?? loop.scheduledAt ?? null);
             const statusLabel = statusLabels[loop.status] ?? loop.status;
-            const slotAvailable = participantCount < capacity && Boolean(loop.slotId);
+            const slotAvailable = participantCount < capacity;
 
             const userIsParticipant =
               firebaseUser?.uid
@@ -188,18 +194,29 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
                         <Link href={loopLink}>{t("activeLoopsResume")}</Link>
                       </Button>
                     )}
-                    <Button
-                      className="sm:ml-auto"
-                      disabled={
-                        !firebaseUser ||
-                        !slotAvailable ||
-                        joiningLoopId === loop.id ||
-                        !loop.slotId
-                      }
-                      onClick={() => joinLoop(loop)}
-                    >
-                      {joiningLoopId === loop.id ? t("activeLoopsJoining") : t("activeLoopsJoin")}
-                    </Button>
+                    {loop.slotId ? (
+                      <Button
+                        className="sm:ml-auto"
+                        disabled={
+                          !firebaseUser ||
+                          !slotAvailable ||
+                          joiningLoopId === loop.id
+                        }
+                        onClick={() => joinLoop(loop)}
+                      >
+                        {joiningLoopId === loop.id ? t("activeLoopsJoining") : t("activeLoopsJoin")}
+                      </Button>
+                    ) : (
+                      loopLink && (
+                        <Button
+                          className="sm:ml-auto"
+                          disabled={!firebaseUser}
+                          onClick={() => router.push(loopLink)}
+                        >
+                          {t("activeLoopsJoin")}
+                        </Button>
+                      )
+                    )}
                   </div>
                 </div>
               </div>

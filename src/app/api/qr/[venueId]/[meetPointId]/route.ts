@@ -52,64 +52,127 @@ export async function GET(request: Request, { params }: RouteContext) {
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  let cursorY = pageHeight - 60;
+  const margin = 36;
+  const headerHeight = 150;
+  const brandPrimary = rgb(7 / 255, 19 / 255, 26 / 255);
+  const accentColor = rgb(120 / 255, 190 / 255, 32 / 255);
+  const textColor = rgb(15 / 255, 31 / 255, 38 / 255);
+  const mutedColor = rgb(97 / 255, 115 / 255, 122 / 255);
+  const softGray = rgb(233 / 255, 238 / 255, 240 / 255);
+
+  // Header block with hero text about Loop
+  page.drawRectangle({
+    x: 0,
+    y: pageHeight - headerHeight,
+    width: pageWidth,
+    height: headerHeight,
+    color: brandPrimary,
+  });
+
+  const contentWidth = pageWidth - margin * 2;
+  let headerCursorY = pageHeight - 40;
   page.drawText("Loop Check-in", {
-    x: 36,
-    y: cursorY,
-    size: 24,
+    x: margin,
+    y: headerCursorY,
+    size: 28,
     font: fontBold,
-    color: rgb(7 / 255, 19 / 255, 26 / 255),
+    color: rgb(1, 1, 1),
   });
 
-  cursorY -= 30;
-  page.drawText(venue.name, {
-    x: 36,
-    y: cursorY,
-    size: 16,
-    font: fontBold,
-    color: rgb(7 / 255, 19 / 255, 26 / 255),
-  });
-
-  cursorY -= 24;
-  page.drawText(meetPoint.label, {
-    x: 36,
-    y: cursorY,
+  headerCursorY -= 28;
+  page.drawText("Digitale Anmeldung", {
+    x: margin,
+    y: headerCursorY,
     size: 14,
+    font: fontRegular,
+    color: rgb(210 / 255, 225 / 255, 232 / 255),
+  });
+
+  headerCursorY -= 24;
+  page.drawText("Was ist Loop?", {
+    x: margin,
+    y: headerCursorY,
+    size: 12,
     font: fontBold,
-    color: rgb(120 / 255, 190 / 255, 32 / 255),
+    color: accentColor,
+  });
+
+  headerCursorY -= 18;
+  const loopIntro =
+    "Loop ist die soziale Check-in-App für spontane Meet-Up's und Bekanntschaften an der BUW!";
+  const loopIntroLines = splitText(loopIntro, fontRegular, 11, contentWidth);
+  loopIntroLines.forEach((line) => {
+    headerCursorY -= 14;
+    page.drawText(line, {
+      x: margin,
+      y: headerCursorY,
+      size: 11,
+      font: fontRegular,
+      color: rgb(220 / 255, 235 / 255, 239 / 255),
+    });
+  });
+
+  // Location block
+  let cursorY = pageHeight - headerHeight - 34;
+  page.drawText("Standort", {
+    x: margin,
+    y: cursorY,
+    size: 10,
+    font: fontBold,
+    color: mutedColor,
+  });
+
+  cursorY -= 18;
+  const venueLines = splitText(venue.name, fontBold, 18, contentWidth);
+  venueLines.forEach((line, index) => {
+    page.drawText(line, {
+      x: margin,
+      y: cursorY,
+      size: 18,
+      font: fontBold,
+      color: textColor,
+    });
+    cursorY -= index === venueLines.length - 1 ? 26 : 22;
+  });
+
+  const meetPointLines = splitText(meetPoint.label, fontBold, 15, contentWidth);
+  meetPointLines.forEach((line) => {
+    page.drawText(line, {
+      x: margin,
+      y: cursorY,
+      size: 15,
+      font: fontBold,
+      color: accentColor,
+    });
+    cursorY -= 20;
   });
 
   if (meetPoint.description) {
-    cursorY -= 18;
-    page.drawText(meetPoint.description, {
-      x: 36,
-      y: cursorY,
-      size: 12,
-      font: fontRegular,
-      color: rgb(7 / 255, 19 / 255, 26 / 255),
+    const descriptionLines = splitText(meetPoint.description, fontRegular, 12, contentWidth);
+    descriptionLines.forEach((line) => {
+      page.drawText(line, {
+        x: margin,
+        y: cursorY,
+        size: 12,
+        font: fontRegular,
+        color: textColor,
+      });
+      cursorY -= 16;
     });
   }
 
-  if (meetPoint.instructions) {
-    cursorY -= 24;
-    const textWidth = pageWidth - 72;
-    const lines = splitText(meetPoint.instructions, fontRegular, 10, textWidth);
-    lines.forEach((line) => {
-      cursorY -= 14;
-      page.drawText(line, {
-        x: 36,
-        y: cursorY,
-        size: 10,
-        font: fontRegular,
-        color: rgb(65 / 255, 82 / 255, 86 / 255),
-      });
-    });
-  }
+  cursorY -= 2;
+  page.drawLine({
+    start: { x: margin, y: cursorY },
+    end: { x: pageWidth - margin, y: cursorY },
+    thickness: 1,
+    color: softGray,
+  });
 
   const qrImage = await pdfDoc.embedPng(qrBuffer);
-  const qrSize = 260;
+  const qrSize = 190;
   const qrX = (pageWidth - qrSize) / 2;
-  const qrY = 140;
+  const qrY = cursorY - qrSize - 12;
   const scale = qrSize / qrImage.width;
   page.drawImage(qrImage, {
     x: qrX,
@@ -117,16 +180,44 @@ export async function GET(request: Request, { params }: RouteContext) {
     width: qrImage.width * scale,
     height: qrImage.height * scale,
   });
-
   const normalizedBase = baseUrl.replace(/\/$/, "");
-  const linkText = `${normalizedBase}/checkin`;
-  page.drawText(`Scanne oder öffne ${linkText}`, {
-    x: 36,
-    y: 110,
+  const linkText = `Scanne oder öffne ${normalizedBase}/checkin`;
+  const linkWidth = fontRegular.widthOfTextAtSize(linkText, 10);
+  const linkX = (pageWidth - linkWidth) / 2;
+  const linkY = qrY - 12;
+  page.drawText(linkText, {
+    x: linkX,
+    y: linkY,
     size: 10,
     font: fontRegular,
-    color: rgb(7 / 255, 19 / 255, 26 / 255),
+    color: textColor,
   });
+
+  let footerCursorY = linkY - 22;
+  if (meetPoint.instructions) {
+    footerCursorY -= 14;
+    page.drawText("Hinweise für diesen Treffpunkt", {
+      x: margin,
+      y: footerCursorY,
+      size: 10,
+      font: fontBold,
+      color: accentColor,
+    });
+
+    footerCursorY -= 12;
+    const instructionLines = splitText(meetPoint.instructions, fontRegular, 9, contentWidth);
+    for (const line of instructionLines) {
+      if (footerCursorY <= 36) break;
+      page.drawText(line, {
+        x: margin,
+        y: footerCursorY,
+        size: 9,
+        font: fontRegular,
+        color: textColor,
+      });
+      footerCursorY -= 11;
+    }
+  }
 
   const pdfBytes = await pdfDoc.save();
   const pdfBuffer = Buffer.from(pdfBytes);

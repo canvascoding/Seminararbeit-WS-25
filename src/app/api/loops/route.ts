@@ -15,8 +15,19 @@ type WaitingParticipant = {
   email?: string | null;
 };
 
+type LoopFeedbackAttendance =
+  | "allPresent"
+  | "someoneMissing"
+  | "stoodAlone"
+  | "unknown";
+type LoopFeedbackSafety = "verySafe" | "mostlySafe" | "unsafe" | "unknown";
+type LoopFeedbackFollowUp = "again" | "maybe" | "no" | "unknown";
+
 type RoomLoopFeedback = {
   rating: "great" | "ok" | "bad";
+  attendance: LoopFeedbackAttendance;
+  safety: LoopFeedbackSafety;
+  followUp: LoopFeedbackFollowUp;
   note?: string | null;
   submittedAt: string;
   submittedBy?: string | null;

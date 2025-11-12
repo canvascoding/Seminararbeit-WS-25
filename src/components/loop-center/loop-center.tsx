@@ -13,6 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/providers/auth-provider";
 
 type FeedbackRating = "great" | "ok" | "bad";
+type FeedbackAttendance = "allPresent" | "someoneMissing" | "stoodAlone" | "unknown";
+type FeedbackSafety = "verySafe" | "mostlySafe" | "unsafe" | "unknown";
+type FeedbackFollowUp = "again" | "maybe" | "no" | "unknown";
 
 interface LoopParticipant {
   userId: string;
@@ -23,6 +26,9 @@ interface LoopParticipant {
 
 interface LoopFeedback {
   rating: FeedbackRating;
+  attendance: FeedbackAttendance;
+  safety: FeedbackSafety;
+  followUp: FeedbackFollowUp;
   note?: string | null;
   submittedAt?: string | null;
   submittedBy?: string | null;
@@ -90,6 +96,9 @@ export function LoopCenter() {
   const [tab, setTab] = useState<"active" | "history">("active");
   const [feedbackLoopId, setFeedbackLoopId] = useState<string | null>(null);
   const [feedbackRating, setFeedbackRating] = useState<FeedbackRating | "">("");
+  const [feedbackAttendance, setFeedbackAttendance] = useState<FeedbackAttendance | "">("");
+  const [feedbackSafety, setFeedbackSafety] = useState<FeedbackSafety | "">("");
+  const [feedbackFollowUp, setFeedbackFollowUp] = useState<FeedbackFollowUp | "">("");
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
@@ -125,12 +134,66 @@ export function LoopCenter() {
     ],
     [t],
   );
+  const attendanceOptions = useMemo(
+    () => [
+      { value: "allPresent" as FeedbackAttendance, label: t("feedbackAttendanceOptionAllPresent") },
+      { value: "someoneMissing" as FeedbackAttendance, label: t("feedbackAttendanceOptionMissing") },
+      { value: "stoodAlone" as FeedbackAttendance, label: t("feedbackAttendanceOptionAlone") },
+    ],
+    [t],
+  );
+  const safetyOptions = useMemo(
+    () => [
+      { value: "verySafe" as FeedbackSafety, label: t("feedbackSafetyOptionVerySafe") },
+      { value: "mostlySafe" as FeedbackSafety, label: t("feedbackSafetyOptionMostlySafe") },
+      { value: "unsafe" as FeedbackSafety, label: t("feedbackSafetyOptionUnsafe") },
+    ],
+    [t],
+  );
+  const followUpOptions = useMemo(
+    () => [
+      { value: "again" as FeedbackFollowUp, label: t("feedbackFollowUpOptionAgain") },
+      { value: "maybe" as FeedbackFollowUp, label: t("feedbackFollowUpOptionMaybe") },
+      { value: "no" as FeedbackFollowUp, label: t("feedbackFollowUpOptionNo") },
+    ],
+    [t],
+  );
+  const attendanceAnswerLabels = useMemo(
+    () =>
+      ({
+        allPresent: t("feedbackAttendanceOptionAllPresent"),
+        someoneMissing: t("feedbackAttendanceOptionMissing"),
+        stoodAlone: t("feedbackAttendanceOptionAlone"),
+        unknown: t("feedbackUnknownAnswer"),
+      }) satisfies Record<FeedbackAttendance, string>,
+    [t],
+  );
+  const safetyAnswerLabels = useMemo(
+    () =>
+      ({
+        verySafe: t("feedbackSafetyOptionVerySafe"),
+        mostlySafe: t("feedbackSafetyOptionMostlySafe"),
+        unsafe: t("feedbackSafetyOptionUnsafe"),
+        unknown: t("feedbackUnknownAnswer"),
+      }) satisfies Record<FeedbackSafety, string>,
+    [t],
+  );
+  const followUpAnswerLabels = useMemo(
+    () =>
+      ({
+        again: t("feedbackFollowUpOptionAgain"),
+        maybe: t("feedbackFollowUpOptionMaybe"),
+        no: t("feedbackFollowUpOptionNo"),
+        unknown: t("feedbackUnknownAnswer"),
+      }) satisfies Record<FeedbackFollowUp, string>,
+    [t],
+  );
 
   async function submitFeedback(loop: LoopSummary, event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     if (!resolvedUserId) return;
-    if (!feedbackRating) {
-      setFeedbackError(t("feedbackMissingRating"));
+    if (!feedbackRating || !feedbackAttendance || !feedbackSafety || !feedbackFollowUp) {
+      setFeedbackError(t("feedbackMissingDetails"));
       return;
     }
     setSubmittingFeedback(true);
@@ -143,6 +206,9 @@ export function LoopCenter() {
         userId: resolvedUserId,
         ownerName,
         feedbackRating,
+        feedbackAttendance,
+        feedbackSafety,
+        feedbackFollowUp,
         feedbackNote: feedbackNote.trim(),
       };
       const response = await fetch("/api/test/waiting-room", {
@@ -155,6 +221,9 @@ export function LoopCenter() {
       }
       setFeedbackLoopId(null);
       setFeedbackRating("");
+      setFeedbackAttendance("");
+      setFeedbackSafety("");
+      setFeedbackFollowUp("");
       setFeedbackNote("");
       await refetch();
     } catch {
@@ -167,6 +236,9 @@ export function LoopCenter() {
   function resetFeedbackState() {
     setFeedbackLoopId(null);
     setFeedbackRating("");
+    setFeedbackAttendance("");
+    setFeedbackSafety("");
+    setFeedbackFollowUp("");
     setFeedbackNote("");
     setFeedbackError(null);
   }
@@ -266,6 +338,9 @@ export function LoopCenter() {
               (participant) => participant.userId && participant.userId !== resolvedUserId,
             );
             const canCloseFromCenter = loop.isOwner && loop.status !== "completed" && hasGuests;
+            const attendanceValue = (loop.feedback?.attendance ?? "unknown") as FeedbackAttendance;
+            const safetyValue = (loop.feedback?.safety ?? "unknown") as FeedbackSafety;
+            const followUpValue = (loop.feedback?.followUp ?? "unknown") as FeedbackFollowUp;
             return (
               <Card key={loop.id} className="p-4 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -341,22 +416,42 @@ export function LoopCenter() {
 
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-wide text-loop-slate/60">
-                    {t("feedbackSection")}
-                  </p>
-                  {loop.feedback ? (
-                    <div className="rounded-2xl border border-loop-green/20 bg-loop-green/5 px-3 py-2 text-sm text-loop-slate">
-                      <p className="font-semibold">
-                        {t(`feedbackLabel.${loop.feedback.rating}`)}
-                      </p>
-                      {loop.feedback.note && (
-                        <p className="text-loop-slate/70">{loop.feedback.note}</p>
-                      )}
-                    </div>
-                  ) : loop.autoClosed ? (
-                    <div className="rounded-2xl border border-loop-slate/15 bg-loop-slate/5 px-3 py-2 text-sm text-loop-slate/70">
-                      {t("feedbackAutoClosed")}
-                    </div>
-                  ) : loop.isOwner && loop.status !== "completed" ? (
+                  {t("feedbackSection")}
+                </p>
+                {loop.feedback ? (
+                  <div className="space-y-2 rounded-2xl border border-loop-green/20 bg-loop-green/5 px-3 py-3 text-sm text-loop-slate">
+                    <p className="font-semibold">
+                      {t(`feedbackLabel.${loop.feedback.rating}`)}
+                    </p>
+                    <dl className="grid gap-3 text-xs text-loop-slate/80 sm:grid-cols-3">
+                      <div>
+                        <dt className="font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackAttendanceSummary")}
+                        </dt>
+                        <dd>{attendanceAnswerLabels[attendanceValue]}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackSafetySummary")}
+                        </dt>
+                        <dd>{safetyAnswerLabels[safetyValue]}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackFollowUpSummary")}
+                        </dt>
+                        <dd>{followUpAnswerLabels[followUpValue]}</dd>
+                      </div>
+                    </dl>
+                    {loop.feedback.note && (
+                      <p className="text-loop-slate/70">{loop.feedback.note}</p>
+                    )}
+                  </div>
+                ) : loop.autoClosed ? (
+                  <div className="rounded-2xl border border-loop-slate/15 bg-loop-slate/5 px-3 py-2 text-sm text-loop-slate/70">
+                    {t("feedbackAutoClosed")}
+                  </div>
+                ) : loop.isOwner && loop.status !== "completed" ? (
                     <div className="rounded-2xl border border-loop-slate/20 bg-white/80 px-3 py-2 text-sm text-loop-slate/70">
                       {t("feedbackPendingOwner")}
                     </div>
@@ -382,6 +477,9 @@ export function LoopCenter() {
                         } else {
                           setFeedbackLoopId(loop.id);
                           setFeedbackRating("");
+                          setFeedbackAttendance("");
+                          setFeedbackSafety("");
+                          setFeedbackFollowUp("");
                           setFeedbackNote("");
                           setFeedbackError(null);
                         }
@@ -414,6 +512,75 @@ export function LoopCenter() {
                           <span>{option.label}</span>
                         </label>
                       ))}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                        {t("feedbackAttendanceLabel")}
+                      </p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {attendanceOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                          >
+                            <input
+                              type="radio"
+                              name={`attendance-${loop.id}`}
+                              className="accent-loop-green"
+                              value={option.value}
+                              checked={feedbackAttendance === option.value}
+                              onChange={() => setFeedbackAttendance(option.value)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                        {t("feedbackSafetyLabel")}
+                      </p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {safetyOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                          >
+                            <input
+                              type="radio"
+                              name={`safety-${loop.id}`}
+                              className="accent-loop-green"
+                              value={option.value}
+                              checked={feedbackSafety === option.value}
+                              onChange={() => setFeedbackSafety(option.value)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                        {t("feedbackFollowUpLabel")}
+                      </p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {followUpOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                          >
+                            <input
+                              type="radio"
+                              name={`follow-up-${loop.id}`}
+                              className="accent-loop-green"
+                              value={option.value}
+                              checked={feedbackFollowUp === option.value}
+                              onChange={() => setFeedbackFollowUp(option.value)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-loop-slate">

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,9 +42,15 @@ interface LoopMessage {
 }
 
 type FeedbackRating = "great" | "ok" | "bad";
+type FeedbackAttendance = "allPresent" | "someoneMissing" | "stoodAlone" | "unknown";
+type FeedbackSafety = "verySafe" | "mostlySafe" | "unsafe" | "unknown";
+type FeedbackFollowUp = "again" | "maybe" | "no" | "unknown";
 
 interface LoopFeedback {
   rating: FeedbackRating;
+  attendance: FeedbackAttendance;
+  safety: FeedbackSafety;
+  followUp: FeedbackFollowUp;
   note?: string | null;
   submittedAt?: string | null;
   submittedBy?: string | null;
@@ -105,21 +112,6 @@ interface WaitingRoomProps {
   meetPoints?: MeetingPointOption[];
 }
 
-const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-
-function formatInputValue(source?: string | Date | null) {
-  if (!source) return "";
-  const date = source instanceof Date ? source : new Date(source);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (value: number) => value.toString().padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
 function formatDateDisplay(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -151,6 +143,7 @@ export function WaitingRoom({
   meetPoints = [],
 }: WaitingRoomProps) {
   const t = useTranslations("waitingRoom");
+  const router = useRouter();
   const { firebaseUser, profile, mockMode } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [localMockUserId, setLocalMockUserId] = useState<string | null>(null);
@@ -162,18 +155,25 @@ export function WaitingRoom({
   const [updatingCapacity, setUpdatingCapacity] = useState(false);
   const [copied, setCopied] = useState(false);
   const [selectedMeetPointId, setSelectedMeetPointId] = useState<string>("");
-  const [scheduleInput, setScheduleInput] = useState(() =>
-    formatInputValue(new Date()),
-  );
   const [chatMessage, setChatMessage] = useState("");
   const [sendingChat, setSendingChat] = useState(false);
   const [chatNotice, setChatNotice] = useState<string | null>(null);
   const [locationNotice, setLocationNotice] = useState<string | null>(null);
   const [feedbackVisible, setFeedbackVisible] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState<FeedbackRating | "">("");
+  const [feedbackAttendance, setFeedbackAttendance] = useState<FeedbackAttendance | "">("");
+  const [feedbackSafety, setFeedbackSafety] = useState<FeedbackSafety | "">("");
+  const [feedbackFollowUp, setFeedbackFollowUp] = useState<FeedbackFollowUp | "">("");
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  function resetFeedbackInputs() {
+    setFeedbackRating("");
+    setFeedbackAttendance("");
+    setFeedbackSafety("");
+    setFeedbackFollowUp("");
+    setFeedbackNotes("");
+  }
   const lastLocationRef = useRef<{ lat: number; lng: number; timestamp: number } | null>(null);
   const userId = firebaseUser?.uid ?? localMockUserId;
   const ownerName = useMemo(() => {
@@ -260,12 +260,6 @@ export function WaitingRoom({
       setSelectedMeetPointId(data.meetingPoint.id);
     }
   }, [data?.meetingPoint?.id]);
-
-  useEffect(() => {
-    if (data?.scheduledAt) {
-      setScheduleInput(formatInputValue(data.scheduledAt));
-    }
-  }, [data?.scheduledAt]);
 
   const setupComplete = data?.setupComplete ?? false;
   const capacityConfirmed = data?.capacityConfirmed ?? false;
@@ -407,26 +401,6 @@ export function WaitingRoom({
     }
   }
 
-  async function handleScheduleChange(value: string) {
-    if (!isOwner) return;
-    setScheduleInput(value);
-    if (!value) {
-      return;
-    }
-    const isoValue = new Date(value).toISOString();
-    setInfo(null);
-    try {
-      await mutateRoom({ action: "configure", scheduledAt: isoValue });
-      setInfo(
-        t("scheduleUpdated", {
-          time: formatDateDisplay(isoValue),
-        }),
-      );
-    } catch {
-      // handled
-    }
-  }
-
   async function handleStartLoop() {
     if (!isOwner) return;
     if (waitingRoomLocked) {
@@ -481,8 +455,8 @@ export function WaitingRoom({
     if (!matchedLoop || !isOwner) {
       return;
     }
-    if (!feedbackRating) {
-      setFeedbackError(t("feedbackMissingRating"));
+    if (!feedbackRating || !feedbackAttendance || !feedbackSafety || !feedbackFollowUp) {
+      setFeedbackError(t("feedbackMissingDetails"));
       return;
     }
     setFeedbackSubmitting(true);
@@ -492,12 +466,15 @@ export function WaitingRoom({
         action: "endLoop",
         loopId: matchedLoop.id,
         feedbackRating,
+        feedbackAttendance,
+        feedbackSafety,
+        feedbackFollowUp,
         feedbackNote: feedbackNotes.trim(),
       });
       setFeedbackVisible(false);
-      setFeedbackRating("");
-      setFeedbackNotes("");
+      resetFeedbackInputs();
       setInfo(t("loopEnded"));
+      router.push("/loop-center");
     } catch {
       setFeedbackError(t("feedbackSubmitError"));
     } finally {
@@ -530,8 +507,7 @@ export function WaitingRoom({
     setChatNotice(null);
     setChatMessage("");
     setFeedbackVisible(false);
-    setFeedbackRating("");
-    setFeedbackNotes("");
+    resetFeedbackInputs();
     setFeedbackError(null);
   }, [matchedLoop?.id]);
 
@@ -753,13 +729,36 @@ export function WaitingRoom({
     ],
     [t],
   );
+  const feedbackAttendanceOptions = useMemo(
+    () => [
+      { value: "allPresent" as FeedbackAttendance, label: t("feedbackAttendanceOptionAllPresent") },
+      { value: "someoneMissing" as FeedbackAttendance, label: t("feedbackAttendanceOptionMissing") },
+      { value: "stoodAlone" as FeedbackAttendance, label: t("feedbackAttendanceOptionAlone") },
+    ],
+    [t],
+  );
+  const feedbackSafetyOptions = useMemo(
+    () => [
+      { value: "verySafe" as FeedbackSafety, label: t("feedbackSafetyOptionVerySafe") },
+      { value: "mostlySafe" as FeedbackSafety, label: t("feedbackSafetyOptionMostlySafe") },
+      { value: "unsafe" as FeedbackSafety, label: t("feedbackSafetyOptionUnsafe") },
+    ],
+    [t],
+  );
+  const feedbackFollowUpOptions = useMemo(
+    () => [
+      { value: "again" as FeedbackFollowUp, label: t("feedbackFollowUpOptionAgain") },
+      { value: "maybe" as FeedbackFollowUp, label: t("feedbackFollowUpOptionMaybe") },
+      { value: "no" as FeedbackFollowUp, label: t("feedbackFollowUpOptionNo") },
+    ],
+    [t],
+  );
 
   const canStartLoop =
     isOwner &&
     setupComplete &&
     roomStatus !== "active" &&
     !!data?.meetingPoint?.label &&
-    !!data?.scheduledAt &&
     !activeLoop;
   const meetingPointSummary = data?.meetingPoint?.label
     ? `${data.meetingPoint.label}${data.meetingPoint.description ? ` · ${data.meetingPoint.description}` : ""}`
@@ -773,8 +772,6 @@ export function WaitingRoom({
   const canResetRoom = isOwner && !hasGuestsInActiveLoop;
   const canShowEndLoop =
     Boolean(isOwner && matchedLoop?.status === "active" && matchedLoop.participantIds.some((id) => id !== userId));
-  const scheduleMin = formatInputValue(new Date());
-  const scheduleMax = formatInputValue(new Date(Date.now() + TWO_HOURS_MS));
 
   return (
     <div className="space-y-5 sm:space-y-6">
@@ -826,7 +823,7 @@ export function WaitingRoom({
       </Card>
 
       <Card className="space-y-4">
-        <div className="grid gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="text-sm font-semibold text-loop-slate">
               {t("nameLabel")}
@@ -898,21 +895,6 @@ export function WaitingRoom({
             {selectedMeetingPoint?.instructions && (
               <p className="text-sm text-loop-slate/60">{selectedMeetingPoint.instructions}</p>
             )}
-          </div>
-          <div>
-            <label className="text-sm font-semibold text-loop-slate">
-              {t("scheduleLabel")}
-            </label>
-            <input
-              type="datetime-local"
-              className="mt-2 w-full rounded-2xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm min-h-[44px]"
-              value={scheduleInput}
-              min={scheduleMin}
-              max={scheduleMax}
-              onChange={(event) => handleScheduleChange(event.target.value)}
-              disabled={!isOwner}
-            />
-            <p className="mt-1 text-sm text-loop-slate/60">{t("scheduleHint")}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -1073,8 +1055,10 @@ export function WaitingRoom({
                       type="button"
                       variant={feedbackVisible ? "ghost" : "danger"}
                       onClick={() => {
-                        setFeedbackVisible((prev) => !prev);
+                        const next = !feedbackVisible;
+                        setFeedbackVisible(next);
                         setFeedbackError(null);
+                        resetFeedbackInputs();
                       }}
                     >
                       {feedbackVisible ? t("feedbackCancel") : t("endLoopButton")}
@@ -1104,6 +1088,75 @@ export function WaitingRoom({
                         ))}
                       </div>
                       <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackAttendanceLabel")}
+                        </p>
+                        <div className="mt-2 flex flex-col gap-2">
+                          {feedbackAttendanceOptions.map((option) => (
+                            <label
+                              key={option.value}
+                              className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                            >
+                              <input
+                                type="radio"
+                                name="feedbackAttendance"
+                                className="accent-loop-green"
+                                value={option.value}
+                                checked={feedbackAttendance === option.value}
+                                onChange={() => setFeedbackAttendance(option.value)}
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackSafetyLabel")}
+                        </p>
+                        <div className="mt-2 flex flex-col gap-2">
+                          {feedbackSafetyOptions.map((option) => (
+                            <label
+                              key={option.value}
+                              className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                            >
+                              <input
+                                type="radio"
+                                name="feedbackSafety"
+                                className="accent-loop-green"
+                                value={option.value}
+                                checked={feedbackSafety === option.value}
+                                onChange={() => setFeedbackSafety(option.value)}
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-loop-slate/60">
+                          {t("feedbackFollowUpLabel")}
+                        </p>
+                        <div className="mt-2 flex flex-col gap-2">
+                          {feedbackFollowUpOptions.map((option) => (
+                            <label
+                              key={option.value}
+                              className="flex items-center gap-2 rounded-xl border border-loop-slate/20 bg-white/70 px-3 py-2 text-sm text-loop-slate"
+                            >
+                              <input
+                                type="radio"
+                                name="feedbackFollowUp"
+                                className="accent-loop-green"
+                                value={option.value}
+                                checked={feedbackFollowUp === option.value}
+                                onChange={() => setFeedbackFollowUp(option.value)}
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
                         <label className="text-sm font-semibold text-loop-slate">
                           {t("feedbackNoteLabel")}
                         </label>
@@ -1128,6 +1181,7 @@ export function WaitingRoom({
                           onClick={() => {
                             setFeedbackVisible(false);
                             setFeedbackError(null);
+                            resetFeedbackInputs();
                           }}
                         >
                           {t("feedbackCancel")}

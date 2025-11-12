@@ -99,6 +99,9 @@ export function CheckInScanner({
               ownerName: profile?.displayName ?? firebaseUser.displayName ?? "",
               feedbackRating: "ok",
               feedbackNote: "Automatisch beendet – Standort gewechselt.",
+              feedbackAttendance: "unknown",
+              feedbackSafety: "unknown",
+              feedbackFollowUp: "unknown",
             }),
           });
         }),

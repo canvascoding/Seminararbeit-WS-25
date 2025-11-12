@@ -166,6 +166,7 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
   const roomLoops: Loop[] = [];
   waitingRoomSnapshot.docs.forEach((doc) => {
     const roomData = doc.data() as {
+      capacity?: number;
       loops?: Array<{
         id?: string;
         slotId?: string | null;
@@ -178,8 +179,13 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
         createdAt?: string | null;
         ownerId?: string | null;
         ownerName?: string | null;
+        capacity?: number;
       }>;
     };
+    const roomCapacity =
+      typeof roomData.capacity === "number" && Number.isFinite(roomData.capacity)
+        ? roomData.capacity
+        : undefined;
     const loops = Array.isArray(roomData.loops) ? roomData.loops : [];
     loops.forEach((loopData, index) => {
       if (!loopData || !loopData.status || !ACTIVE_LOOP_STATUSES.includes(loopData.status)) {
@@ -209,6 +215,10 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
         ownerName: loopData.ownerName ?? null,
         participants: participantIds,
         participantProfiles,
+        capacity:
+          typeof loopData.capacity === "number" && Number.isFinite(loopData.capacity)
+            ? loopData.capacity
+            : roomCapacity,
         meetPoint: loopData.meetingPoint?.label
           ? {
               label: loopData.meetingPoint.label,
