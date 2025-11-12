@@ -2,13 +2,14 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useAuth } from "@/providers/auth-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info } from "lucide-react";
 
 interface AuthGuardProps {
   children: React.ReactNode;
-  redirectTo?: string;
+  redirectTo?: Route | string;
 }
 
 export function AuthGuard({ children, redirectTo = "/" }: AuthGuardProps) {
@@ -26,7 +27,7 @@ export function AuthGuard({ children, redirectTo = "/" }: AuthGuardProps) {
     if (!firebaseUser) {
       // Kurze Verzögerung, damit der Nutzer die Info-Nachricht sehen kann
       const timer = setTimeout(() => {
-        router.push(redirectTo);
+        router.push(redirectTo as Route);
       }, 2000);
       return () => clearTimeout(timer);
     }
