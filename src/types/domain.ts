@@ -93,6 +93,7 @@ export interface Loop {
   createdAt?: string;
   endedAt?: string | null;
   durationMinutes?: number;
+  capacity?: number;
   autoClosed?: boolean;
   status: LoopStatus;
 }
