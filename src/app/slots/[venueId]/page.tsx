@@ -26,9 +26,6 @@ export default async function VenueSlotsPage({ params }: Props) {
     venue.defaultIntents
       ?.map((intent) => intentIndex[intent]?.label)
       .filter((label): label is string => Boolean(label)) ?? [];
-  const waitingRoomLink = `/waiting-room?${new URLSearchParams({
-    venue: venue.id,
-  }).toString()}`;
 
   return (
     <AuthGuard>
@@ -53,7 +50,7 @@ export default async function VenueSlotsPage({ params }: Props) {
               )}
             </div>
             <Button asChild className="sm:self-start">
-              <Link href={waitingRoomLink}>
+              <Link href={`/waiting-room?venue=${venue.id}`}>
                 <Plus className="mr-2 h-4 w-4" />
                 {t("createLoopButton")}
               </Link>
