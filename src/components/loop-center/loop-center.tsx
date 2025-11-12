@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Clock, CheckCircle2 } from "lucide-react";
@@ -254,9 +255,9 @@ export function LoopCenter() {
           {currentList.map((loop) => {
             const status = statusBadges[loop.status] ?? statusBadges.active;
             const roleLabel = loop.isOwner ? t("roleHost") : t("roleParticipant");
-            const waitingRoomUrl = loop.roomId
-              ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}`
-              : "/waiting-room";
+            const waitingRoomUrl: Route = loop.roomId
+              ? (`/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}` as Route)
+              : ("/waiting-room" as Route);
             const canOpenWaitingRoom = loop.isOwner && tab === "active";
             const showFeedbackForm =
               feedbackLoopId === loop.id && loop.isOwner && loop.status !== "completed";
