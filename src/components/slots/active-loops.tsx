@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import type { Route } from "next";
 import type { Loop, Slot, Venue } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,10 +133,10 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
                     (participant) => participant.userId === firebaseUser.uid,
                   )
                 : false;
-            const loopLink = loop.roomId
-              ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}`
+            const loopLink: Route | null = loop.roomId
+              ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}` as Route
               : loop.id
-                ? `/loop/${loop.id}`
+                ? `/loop/${loop.id}` as Route
                 : null;
 
             return (

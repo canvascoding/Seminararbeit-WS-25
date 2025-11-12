@@ -52,6 +52,7 @@ interface LoopFeedback {
 interface WaitingLoop {
   id: string;
   ownerId?: string;
+  ownerName?: string;
   participantIds: string[];
   participants: WaitingParticipant[];
   createdAt: string;

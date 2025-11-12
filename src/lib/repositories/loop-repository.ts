@@ -215,9 +215,9 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
               description: loopData.meetingPoint.description ?? null,
             }
           : undefined,
-        scheduledAt: loopData.scheduledAt ?? null,
-        startAt: loopData.startedAt ?? null,
-        createdAt: loopData.createdAt ?? null,
+        scheduledAt: loopData.scheduledAt ?? undefined,
+        startAt: loopData.startedAt ?? undefined,
+        createdAt: loopData.createdAt ?? undefined,
         status: loopData.status,
       });
     });
