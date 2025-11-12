@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, LogIn, Play, MapPin } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { MouseEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetTitle } from "@/components/ui/sheet";
 import { useAuth } from "@/providers/auth-provider";
@@ -52,7 +53,7 @@ export function TopNav() {
   const t = useTranslations("common");
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, mockMode } = useAuth();
+  const { profile, firebaseUser, mockMode } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentVenueId, setCurrentVenueId] = useState<string>(DEFAULT_VENUE_ID);
   const [currentVenueName, setCurrentVenueName] = useState<string | null>(null);
@@ -135,9 +136,42 @@ export function TopNav() {
     }
   }, [displayCheckInNotice]);
 
+  const resolvedUserId = firebaseUser?.uid ?? profile?.uid ?? null;
+  const { data: activeLoopData } = useQuery({
+    queryKey: ["top-nav-active-loop", resolvedUserId],
+    enabled: Boolean(resolvedUserId),
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      if (!resolvedUserId) return null;
+      const params = new URLSearchParams({
+        userId: resolvedUserId,
+        status: "active,inProgress,scheduled",
+      });
+      const response = await fetch(`/api/loops?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error("Loops konnten nicht geladen werden.");
+      }
+      return (await response.json()) as { loops: Array<{ id: string; status: string; roomId: string | null; venueId?: string | null }> };
+    },
+  });
+
+  const activeLoopLink = useMemo(() => {
+    if (!activeLoopData?.loops) return null;
+    const loop =
+      activeLoopData.loops.find(
+        (entry) => entry.status === "active" || entry.status === "inProgress",
+      ) ?? null;
+    if (!loop) return null;
+    if (!loop.roomId) return "/loop-center";
+    const params = new URLSearchParams({ room: loop.roomId });
+    if (loop.venueId) params.set("venue", loop.venueId);
+    return `/waiting-room?${params.toString()}`;
+  }, [activeLoopData]);
+
   const slotPath = `/slots/${currentVenueId}` as Route;
-  const startPath = profile ? ((isCheckedIn ? slotPath : "/checkin") as Route) : ("/" as Route);
-  const slotsLinkHref = startPath;
+  const defaultStartPath = profile ? ((isCheckedIn ? slotPath : "/checkin") as Route) : ("/" as Route);
+  const startPath = (activeLoopLink ?? defaultStartPath) as Route;
+  const slotsLinkHref = slotPath;
   const venueLabel = currentVenueName ?? t("navVenueUnknown");
   const venueAriaLabel = currentVenueName
     ? t("navVenueActive", { venue: currentVenueName })

@@ -131,14 +131,14 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
   }
 
   const db = getAdminDb();
-  const snapshot = await db
-    .collection("loops")
-    .where("venueId", "==", venueId)
-    .where("status", "in", ACTIVE_LOOP_STATUSES)
-    .get();
-
-  return snapshot.docs
-    .map((doc) => {
+  let firestoreLoops: Loop[] = [];
+  try {
+    const snapshot = await db
+      .collection("loops")
+      .where("venueId", "==", venueId)
+      .where("status", "in", ACTIVE_LOOP_STATUSES)
+      .get();
+    firestoreLoops = snapshot.docs.map((doc) => {
       const data = doc.data() as Loop & {
         startAt?: FirestoreDate;
         scheduledAt?: FirestoreDate;
@@ -153,8 +153,86 @@ export async function listActiveLoops(venueId: string): Promise<Loop[]> {
         createdAt: data.createdAt ? serializeDate(data.createdAt) : undefined,
         endedAt: data.endedAt ? serializeDate(data.endedAt) : null,
       } as Loop;
-    })
-    .sort((a, b) => getLoopSortTimestamp(a) - getLoopSortTimestamp(b));
+    });
+  } catch {
+    firestoreLoops = [];
+  }
+
+  const waitingRoomSnapshot = await db
+    .collection("waitingRooms")
+    .where("venueId", "==", venueId)
+    .get();
+
+  const roomLoops: Loop[] = [];
+  waitingRoomSnapshot.docs.forEach((doc) => {
+    const roomData = doc.data() as {
+      loops?: Array<{
+        id?: string;
+        slotId?: string | null;
+        status?: LoopStatus;
+        participants?: Array<{ userId?: string; alias?: string; joinedAt?: string }> | string[];
+        participantIds?: string[];
+        meetingPoint?: { label?: string | null; description?: string | null } | null;
+        scheduledAt?: string | null;
+        startedAt?: string | null;
+        createdAt?: string | null;
+        ownerId?: string | null;
+        ownerName?: string | null;
+      }>;
+    };
+    const loops = Array.isArray(roomData.loops) ? roomData.loops : [];
+    loops.forEach((loopData, index) => {
+      if (!loopData || !loopData.status || !ACTIVE_LOOP_STATUSES.includes(loopData.status)) {
+        return;
+      }
+      const participantProfiles = Array.isArray(loopData.participants)
+        ? loopData.participants.map((participant) => ({
+            userId: typeof participant === "string" ? participant : participant.userId ?? "",
+            alias: typeof participant === "string" ? participant : participant.alias ?? participant.userId ?? "Gast",
+            joinedAt:
+              typeof participant === "string"
+                ? new Date().toISOString()
+                : participant.joinedAt ?? new Date().toISOString(),
+          }))
+        : [];
+      const participantIds = Array.isArray(loopData.participantIds)
+        ? loopData.participantIds.filter((id): id is string => typeof id === "string")
+        : participantProfiles.map((profile) => profile.userId);
+      roomLoops.push({
+        id:
+          loopData.id ??
+          `${doc.id}-${index}-${loopData.status}-${loopData.startedAt ?? loopData.scheduledAt ?? Date.now()}`,
+        roomId: doc.id,
+        slotId: loopData.slotId ?? null,
+        venueId,
+        ownerId: loopData.ownerId ?? null,
+        ownerName: loopData.ownerName ?? null,
+        participants: participantIds,
+        participantProfiles,
+        meetPoint: loopData.meetingPoint?.label
+          ? {
+              label: loopData.meetingPoint.label,
+              description: loopData.meetingPoint.description ?? null,
+            }
+          : undefined,
+        scheduledAt: loopData.scheduledAt ?? null,
+        startAt: loopData.startedAt ?? null,
+        createdAt: loopData.createdAt ?? null,
+        status: loopData.status,
+      });
+    });
+  });
+
+  const loopMap = new Map<string, Loop>();
+  [...firestoreLoops, ...roomLoops].forEach((loop) => {
+    if (!loopMap.has(loop.id)) {
+      loopMap.set(loop.id, loop);
+    }
+  });
+
+  return Array.from(loopMap.values()).sort(
+    (a, b) => getLoopSortTimestamp(a) - getLoopSortTimestamp(b),
+  );
 }
 
 export async function joinSlot(slotId: string, user: SlotJoinUser) {

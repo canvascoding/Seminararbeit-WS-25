@@ -257,6 +257,7 @@ export function LoopCenter() {
             const waitingRoomUrl = loop.roomId
               ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}`
               : "/waiting-room";
+            const canOpenWaitingRoom = loop.isOwner && tab === "active";
             const showFeedbackForm =
               feedbackLoopId === loop.id && loop.isOwner && loop.status !== "completed";
             const hostName = loop.ownerName ?? t("loopFallbackOwner");
@@ -365,18 +366,18 @@ export function LoopCenter() {
                   )}
                 </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {loop.isOwner && (
-                      <Button asChild variant="secondary">
-                        <Link href={waitingRoomUrl}>{t("openWaitingRoom")}</Link>
-                      </Button>
-                    )}
-                    {canCloseFromCenter && (
-                      <Button
-                        variant={showFeedbackForm ? "ghost" : "danger"}
-                        onClick={() => {
-                          if (showFeedbackForm) {
-                            resetFeedbackState();
+                <div className="flex flex-wrap gap-2">
+                  {canOpenWaitingRoom && (
+                    <Button asChild variant="secondary">
+                      <Link href={waitingRoomUrl}>{t("openWaitingRoom")}</Link>
+                    </Button>
+                  )}
+                  {canCloseFromCenter && (
+                    <Button
+                      variant={showFeedbackForm ? "ghost" : "danger"}
+                      onClick={() => {
+                        if (showFeedbackForm) {
+                          resetFeedbackState();
                         } else {
                           setFeedbackLoopId(loop.id);
                           setFeedbackRating("");

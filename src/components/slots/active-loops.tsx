@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import type { Loop, Slot, Venue } from "@/types/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,10 +120,26 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
             const participantCount =
               loop.participantProfiles?.length ?? loop.participants.length;
             const capacity =
-              slot?.capacity ?? venue.capacity ?? 4;
+              loop.capacity ?? slot?.capacity ?? venue.capacity ?? 4;
             const timeLabel = formatTime(loop.startAt ?? loop.scheduledAt ?? null);
             const statusLabel = statusLabels[loop.status] ?? loop.status;
             const slotAvailable = participantCount < capacity && Boolean(loop.slotId);
+
+            const userIsParticipant =
+              Boolean(firebaseUser?.uid) &&
+              (loop.participants.includes(firebaseUser.uid) ||
+                loop.participantProfiles?.some(
+                  (participant) => participant.userId === firebaseUser.uid,
+                ));
+            const loopLink =
+              loop.roomId
+                ? `/waiting-room?${new URLSearchParams({
+                    room: loop.roomId,
+                    ...(loop.venueId ? { venue: loop.venueId } : {}),
+                  }).toString()}`
+                : loop.id
+                  ? `/loop/${loop.id}`
+                  : null;
 
             return (
               <div
@@ -150,14 +167,15 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
                 </div>
                 <div className="mt-3 space-y-1 text-sm text-loop-slate/70">
                   <p>
-                    {t("activeLoopsMeetPoint", {
-                      label: meetPointDescription
-                        ? `${meetPointLabel} · ${meetPointDescription}`
-                        : meetPointLabel,
-                    })}
+                    {t("activeLoopsMeetPointLabel")}:{" "}
+                    {meetPointDescription
+                      ? `${meetPointLabel} · ${meetPointDescription}`
+                      : meetPointLabel}
                   </p>
                   {timeLabel && (
-                    <p>{t("activeLoopsStartTime", { time: timeLabel })}</p>
+                    <p>
+                      {t("activeLoopsStartLabel")}: {timeLabel}
+                    </p>
                   )}
                 </div>
                 <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -166,18 +184,25 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
                       {t("activeLoopsLoginHint")}
                     </p>
                   )}
-                  <Button
-                    className="sm:ml-auto"
-                    disabled={
-                      !firebaseUser ||
-                      !slotAvailable ||
-                      joiningLoopId === loop.id ||
-                      !loop.slotId
-                    }
-                    onClick={() => joinLoop(loop)}
-                  >
-                    {joiningLoopId === loop.id ? t("activeLoopsJoining") : t("activeLoopsJoin")}
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:ml-auto">
+                    {userIsParticipant && loopLink && (
+                      <Button asChild variant="secondary">
+                        <Link href={loopLink}>{t("activeLoopsResume")}</Link>
+                      </Button>
+                    )}
+                    <Button
+                      className="sm:ml-auto"
+                      disabled={
+                        !firebaseUser ||
+                        !slotAvailable ||
+                        joiningLoopId === loop.id ||
+                        !loop.slotId
+                      }
+                      onClick={() => joinLoop(loop)}
+                    >
+                      {joiningLoopId === loop.id ? t("activeLoopsJoining") : t("activeLoopsJoin")}
+                    </Button>
+                  </div>
                 </div>
               </div>
             );

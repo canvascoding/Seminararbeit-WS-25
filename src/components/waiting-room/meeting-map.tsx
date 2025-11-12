@@ -103,19 +103,30 @@ export const MeetingMap = memo(function MeetingMap({ center, markers }: MeetingM
             : marker.tone === "self"
               ? "#2563eb"
               : "#e63946";
+        const icon =
+          marker.tone === "meeting"
+            ? {
+                path: maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+                scale: 6,
+                fillColor: color,
+                fillOpacity: 1,
+                strokeColor: "#1e3a1e",
+                strokeWeight: 1.5,
+              }
+            : {
+                path: maps.SymbolPath.CIRCLE,
+                scale: marker.tone === "self" ? 9 : 7,
+                fillColor: color,
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 2,
+              };
         return new maps.Marker({
           position: { lat: marker.lat, lng: marker.lng },
           map: mapRef.current!,
           title: marker.label,
           zIndex: marker.tone === "self" ? 3 : marker.tone === "meeting" ? 2 : 1,
-          icon: {
-            path: maps.SymbolPath.CIRCLE,
-            scale: marker.tone === "meeting" ? 10 : 7,
-            fillColor: color,
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 2,
-          },
+          icon,
         });
       });
     }

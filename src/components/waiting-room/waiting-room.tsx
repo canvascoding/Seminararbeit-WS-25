@@ -701,18 +701,28 @@ export function WaitingRoom({
       tone: "meeting" | "participant" | "self";
       label: string;
     }> = [];
-    if (
-      activeMeetPointOption?.geoOffset &&
-      typeof activeMeetPointOption.geoOffset.lat === "number" &&
-      typeof activeMeetPointOption.geoOffset.lng === "number"
-    ) {
+
+    const meetingPointCoords =
+      (activeMeetPointOption?.geoOffset &&
+        typeof activeMeetPointOption.geoOffset.lat === "number" &&
+        typeof activeMeetPointOption.geoOffset.lng === "number" && {
+          lat: activeMeetPointOption.geoOffset.lat,
+          lng: activeMeetPointOption.geoOffset.lng,
+        }) ||
+      venueGeo;
+
+    if (meetingPointCoords) {
       markers.push({
-        lat: activeMeetPointOption.geoOffset.lat,
-        lng: activeMeetPointOption.geoOffset.lng,
+        lat: meetingPointCoords.lat,
+        lng: meetingPointCoords.lng,
         tone: "meeting",
-        label: activeMeetPointOption.label,
+        label:
+          activeMeetPointOption?.label ??
+          displayedLoop?.meetingPoint?.label ??
+          t("mapLegendMeetingPoint"),
       });
     }
+
     participantMarkers.forEach((marker) => {
       markers.push({
         lat: marker.lat,
@@ -722,7 +732,14 @@ export function WaitingRoom({
       });
     });
     return markers;
-  }, [activeMeetPointOption?.geoOffset, activeMeetPointOption?.label, participantMarkers]);
+  }, [
+    activeMeetPointOption?.geoOffset,
+    activeMeetPointOption?.label,
+    displayedLoop?.meetingPoint?.label,
+    participantMarkers,
+    t,
+    venueGeo,
+  ]);
   const selectedMeetingPoint = useMemo(
     () => meetPoints.find((point) => point.id === selectedMeetPointId) ?? null,
     [meetPoints, selectedMeetPointId],

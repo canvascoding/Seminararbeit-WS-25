@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { Venue } from "@/types/domain";
+import { useAuth } from "@/providers/auth-provider";
 
 type PendingVenue = { id: string; name: string | null };
 
@@ -25,6 +26,7 @@ export function CheckInScanner({
 }: Props) {
   const t = useTranslations("checkin");
   const router = useRouter();
+  const { firebaseUser, profile } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
   const navigatingRef = useRef(false);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -60,8 +62,54 @@ export function CheckInScanner({
     [router],
   );
 
+  const endActiveLoopBeforeSwitch = useCallback(async () => {
+    if (!firebaseUser?.uid) return;
+    try {
+      const params = new URLSearchParams({
+        userId: firebaseUser.uid,
+        status: "active,inProgress",
+      });
+      const response = await fetch(`/api/loops?${params.toString()}`);
+      if (!response.ok) {
+        return;
+      }
+      const payload = (await response.json()) as {
+        loops?: Array<{
+          id: string;
+          roomId: string | null;
+          status: string;
+          isOwner?: boolean;
+        }>;
+      };
+      const ownLoops =
+        payload.loops?.filter(
+          (loop) => loop.isOwner && loop.roomId && loop.status !== "completed",
+        ) ?? [];
+      await Promise.all(
+        ownLoops.map(async (loop) => {
+          await fetch("/api/test/waiting-room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roomId: loop.roomId,
+              action: "endLoop",
+              loopId: loop.id,
+              userId: firebaseUser.uid,
+              ownerName: profile?.displayName ?? firebaseUser.displayName ?? "",
+              feedbackRating: "ok",
+              feedbackNote: "Automatisch beendet – Standort gewechselt.",
+            }),
+          });
+        }),
+      );
+    } catch {
+      // fail silently, we fallback to normal navigation
+    }
+  }, [firebaseUser, profile?.displayName]);
+
   const navigateToDestination = useCallback(
-    (venueId: string) => {
+    async (venueId: string) => {
+      await endActiveLoopBeforeSwitch();
       const venue = venues.find((entry) => entry.id === venueId);
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem("checkedInAt", new Date().toISOString());
@@ -100,7 +148,14 @@ export function CheckInScanner({
       setMessage(t("waitingRoomRedirect", { venueId: venueName }));
       proceedToDestination("waiting-room", venueId);
     },
-    [onVenueDetected, redirectTo, proceedToDestination, t, venues],
+    [
+      endActiveLoopBeforeSwitch,
+      onVenueDetected,
+      redirectTo,
+      proceedToDestination,
+      t,
+      venues,
+    ],
   );
 
   const handlePromptVisibility = useCallback(
