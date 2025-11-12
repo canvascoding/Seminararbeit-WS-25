@@ -5,6 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import type { Venue } from "@/types/domain";
 import { useAuth } from "@/providers/auth-provider";
@@ -55,9 +56,9 @@ export function CheckInScanner({
       const target =
         mode === "slots"
           ? `/slots/${venueId}`
-          : `/waiting-room?${new URLSearchParams({ venue: venueId }).toString()}`;
+          : `/waiting-room?venue=${venueId}`;
       navigatingRef.current = true;
-      router.push(target);
+      router.push(target as Route);
     },
     [router],
   );

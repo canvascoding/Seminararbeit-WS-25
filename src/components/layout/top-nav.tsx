@@ -190,7 +190,7 @@ export function TopNav() {
         window.sessionStorage.setItem(CHECKIN_NOTICE_STORAGE_KEY, "true");
       }
       displayCheckInNotice();
-      router.push("/checkin");
+      router.push("/checkin" as Route);
     },
     [requiresCheckInBeforeSlots, displayCheckInNotice, router]
   );

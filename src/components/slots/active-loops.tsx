@@ -131,15 +131,11 @@ export function ActiveLoops({ venue, slots, initialLoops }: Props) {
                 loop.participantProfiles?.some(
                   (participant) => participant.userId === firebaseUser.uid,
                 ));
-            const loopLink =
-              loop.roomId
-                ? `/waiting-room?${new URLSearchParams({
-                    room: loop.roomId,
-                    ...(loop.venueId ? { venue: loop.venueId } : {}),
-                  }).toString()}`
-                : loop.id
-                  ? `/loop/${loop.id}`
-                  : null;
+            const loopLink = loop.roomId
+              ? `/waiting-room?room=${loop.roomId}${loop.venueId ? `&venue=${loop.venueId}` : ""}`
+              : loop.id
+                ? `/loop/${loop.id}`
+                : null;
 
             return (
               <div
